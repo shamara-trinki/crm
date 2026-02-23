@@ -12,6 +12,8 @@ const PERMISSIONS = [
   { code: "ROLE_PERMISSION_UPDATE", description: "Update role permissions" },
   { code: "CUSTOMER_VIEW", description: "View customers" },
   { code: "CUSTOMER_CREATE", description: "Create customers" },
+  { code: "CUSTOMER_UPDATE", description: "Update customers" },
+  { code: "CUSTOMER_DELETE", description: "Delete customers" },
 
 ];
 
