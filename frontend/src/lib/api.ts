@@ -100,7 +100,6 @@ export interface Customer {
   userid: number;
   company: string | null;
   phonenumber?: string | null;
-  country?: number;
   city?: string | null;
   address?: string | null;
   datecreated: string;
@@ -126,6 +125,12 @@ export const customersApi = {
   create: (data: Partial<Customer>) => api.post("/customers", data),
   update: (id: number, data: Partial<Customer>) => api.put(`/customers/${id}`, data),
   delete: (id: number) => api.delete(`/customers/${id}`),
+  
+getAllForExport: (search?: string) => {
+    const query = search ? `?search=${encodeURIComponent(search)}` : '';
+    return api.get<Customer[]>(`/customers/export/all${query}`);
+  },
+
 };
 
 

@@ -11,7 +11,7 @@ import Dashboard from "@/pages/Dashboard";
 import UsersPage from "@/pages/Users";
 import RolesPage from "@/pages/Roles";
 import NotFound from "./pages/NotFound";
-import CustomersPage from "@/pages/Customers";
+import CustomersPage from "@/pages/customers/index";
 
 const queryClient = new QueryClient();
 
