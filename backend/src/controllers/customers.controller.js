@@ -54,13 +54,13 @@ export const getCustomerById = async (req, res) => {
 
 // CREATE customer
 export const createCustomer = async (req, res) => {
-  const { company,phonenumber, country, city, address,active,note, status, type } = req.body;
+  const { company, phonenumber, city, address, active, note, status, type } = req.body;
   try {
     const result = await db.query(
       `INSERT INTO tblclients 
-      (company,phonenumber, country, city, address, datecreated, active, note, status, type) 
-      VALUES (?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)`,
-      [company, phonenumber, country, city, address,  active ?? 1, note, status ?? "active", type]
+      (company, phonenumber, city, address, datecreated, active, note, status, type) 
+      VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, ?)`,
+      [company, phonenumber, city, address, active ?? 1, note, status ?? "active", type]
     );
     res.json({ id: result[0].insertId, message: "Customer created successfully" });
   } catch (err) {
@@ -72,11 +72,11 @@ export const createCustomer = async (req, res) => {
 // UPDATE customer
 export const updateCustomer = async (req, res) => {
   const { id } = req.params;
-  const { company,phonenumber, country, city, address, active, note, status, type } = req.body;
+  const { company, phonenumber, city, address, active, note, status, type } = req.body;
   try {
     await db.query(
-      `UPDATE tblclients SET company=?, phonenumber=?, country=?, city=?, address=?, active=?, note=?, status=?, type=? WHERE userid=?`,
-      [company, phonenumber, country, city, address, active ?? 1, note, status ?? "active", type, id]
+      `UPDATE tblclients SET company=?, phonenumber=?, city=?, address=?, active=?, note=?, status=?, type=? WHERE userid=?`,
+      [company, phonenumber, city, address, active ?? 1, note, status ?? "active", type, id]
     );
     res.json({ message: "Customer updated successfully" });
   } catch (err) {
@@ -104,5 +104,29 @@ export const deleteAllCustomers = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to delete customers" });
+  }
+};
+
+// GET all customers without pagination (for export)
+export const getAllCustomersForExport = async (req, res) => {
+  try {
+    const { search } = req.query;
+    
+    let query = "SELECT userid, company, phonenumber, city, address, datecreated, active, note, status, type FROM tblclients";
+    let params = [];
+
+    if (search) {
+      query += ` WHERE company LIKE ? OR phonenumber LIKE ? OR city LIKE ? OR address LIKE ? OR status LIKE ? OR type LIKE ?`;
+      const searchPattern = `%${search}%`;
+      params.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+    }
+
+    query += " ORDER BY userid DESC";
+    
+    const [rows] = await db.query(query, params);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch customers for export" });
   }
 };
