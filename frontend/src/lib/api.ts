@@ -95,4 +95,43 @@ export const permissionsApi = {
   list: () => api.get<Permission[]>("/permissions"),
 };
 
+// Customers
+export interface Customer {
+  userid: number;
+  company: string | null;
+  phonenumber?: string | null;
+  city?: string | null;
+  address?: string | null;
+  datecreated: string;
+  active: number;
+  note?: string | null;
+  status?: string | null;
+  type?: string | null;
+}
+
+/// Update customersApi to accept query parameters
+export const customersApi = {
+  list: (params?: { page?: number; limit?: number; search?: string }) => {
+    const query = new URLSearchParams(params as Record<string, string>).toString();
+    return api.get<{
+      data: Customer[];
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    }>(`/customers?${query}`);
+  },
+  getById: (id: number) => api.get<Customer>(`/customers/${id}`),
+  create: (data: Partial<Customer>) => api.post("/customers", data),
+  update: (id: number, data: Partial<Customer>) => api.put(`/customers/${id}`, data),
+  delete: (id: number) => api.delete(`/customers/${id}`),
+  
+getAllForExport: (search?: string) => {
+    const query = search ? `?search=${encodeURIComponent(search)}` : '';
+    return api.get<Customer[]>(`/customers/export/all${query}`);
+  },
+
+};
+
+
 export default api;
