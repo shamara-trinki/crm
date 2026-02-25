@@ -7,6 +7,8 @@ import permissionsRoutes from "./routes/permissions.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import rolesRoutes from "./routes/roles.routes.js";
 import usersRoutes from "./routes/users.routes.js";
+import customersRoutes from "./routes/customers.routes.js";
+
 import { bootstrapSuperAdmin } from "./seed/bootstrapSuperAdmin.js";
 
 dotenv.config();
@@ -40,6 +42,7 @@ app.use("/auth", authRoutes);
 app.use("/users", usersRoutes);
 app.use("/roles", rolesRoutes);
 app.use("/permissions", permissionsRoutes);
+app.use("/customers", customersRoutes);
 
 app.get("/health", (req, res) => res.json({ ok: true }));
 
