@@ -19,6 +19,7 @@ const navItems = [
   { label: "Users", icon: Users, href: "/users", permission: "USER_VIEW" },
   { label: "Roles", icon: Shield, href: "/roles", permission: "ROLE_VIEW" },
   { label: "Customers", icon: UserCheck, href: "/customers", permission: "CUSTOMER_VIEW" },
+  { label: "JobScedule", icon: UserCheck, href: "/job-schedule", permission: "CUSTOMER_VIEW" },
 ];
 
 const AppLayout = () => {

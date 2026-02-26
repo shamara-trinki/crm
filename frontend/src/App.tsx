@@ -12,6 +12,8 @@ import UsersPage from "@/pages/Users";
 import RolesPage from "@/pages/Roles";
 import NotFound from "./pages/NotFound";
 import CustomersPage from "@/pages/customers/index";
+import JobSchedule from "@/pages/JobSchedule";
+import JobScheduleList from "@/pages/JobScheduleList";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +37,9 @@ const App = () => (
               <Route path="/users" element={<UsersPage />} />
               <Route path="/roles" element={<RolesPage />} />
               <Route path="/customers" element={<CustomersPage />} />
+       {/* <Route path="/job-schedule" element={<JobSchedule />} /> */}
+          <Route path="/job-schedule" element={<JobScheduleList />} />
+          <Route path="/job-schedule/new" element={<JobSchedule />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
