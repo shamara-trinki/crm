@@ -29,7 +29,6 @@ api.interceptors.response.use(
           {},
           { withCredentials: true }
         );
-        localStorage.setItem("accessToken", data.accessToken);
         original.headers.Authorization = `Bearer ${data.accessToken}`;
         return api(original);
       } catch {
@@ -87,6 +86,7 @@ export interface Role {
 export const rolesApi = {
   list: () => api.get<Role[]>("/roles"),
   create: (name: string) => api.post("/roles", { name }),
+  delete: (roleId: number) => api.delete(`/roles/${roleId}`),
   assignPermissions: (roleId: number, permissions: number[]) =>
     api.post(`/roles/${roleId}/permissions`, { permissions }),
 };
@@ -107,20 +107,31 @@ export interface Customer {
   note?: string | null;
   status?: string | null;
   type?: string | null;
+  permissions: object;
 }
 
 /// Update customersApi to accept query parameters
 export const customersApi = {
   list: (params?: { page?: number; limit?: number; search?: string }) => {
-    const query = new URLSearchParams(params as Record<string, string>).toString();
-    return api.get<{
-      data: Customer[];
-      total: number;
-      page: number;
-      limit: number;
-      totalPages: number;
-    }>(`/customers?${query}`);
-  },
+  const queryParams = new URLSearchParams();
+
+  if (params?.page) queryParams.append("page", params.page.toString());
+  if (params?.limit) queryParams.append("limit", params.limit.toString());
+  if (params?.search) queryParams.append("search", params.search);
+
+  return api.get<{
+    data: Customer[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    permissions: {
+      canCreate: boolean;
+      canDelete: boolean;
+      updateableFields: string[];
+    };
+  }>(`/customers?${queryParams.toString()}`);
+},
   getById: (id: number) => api.get<Customer>(`/customers/${id}`),
   create: (data: Partial<Customer>) => api.post("/customers", data),
   update: (id: number, data: Partial<Customer>) => api.put(`/customers/${id}`, data),
@@ -133,5 +144,105 @@ getAllForExport: (search?: string) => {
 
 };
 
+
+// Contacts
+export interface Contact {
+  id: number;
+  userid: number; // company/customer ID this contact belongs to
+  is_primary: number; // 1 for primary contact, 0 for secondary
+  firstname: string;
+  lastname: string;
+  email: string;
+  phonenumber: string;
+  title: string;
+  datecreated: string;
+  active: number;
+}
+
+export interface ContactsResponse {
+  data: Contact[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export const contactsApi = {
+  // Get all contacts for a company (paginated + search)
+  listForCompany: (userid: number, params?: { page?: number; limit?: number; search?: string }) => {
+    const query = new URLSearchParams(params as Record<string, string>).toString();
+    return api.get<ContactsResponse>(`/contacts/company/${userid}${query ? `?${query}` : ''}`);
+  },
+
+  // Get single contact by ID
+  getById: (id: number) => 
+    api.get<Contact>(`/contacts/${id}`),
+
+  // Create new contact
+  create: (data: Partial<Contact>) => 
+    api.post<{ id: number; message: string }>("/contacts", data),
+
+  // Update contact
+  update: (id: number, data: Partial<Contact>) => 
+    api.put<{ message: string }>(`/contacts/${id}`, data),
+
+  // Delete single contact
+  delete: (id: number) => 
+    api.delete<{ message: string }>(`/contacts/${id}`),
+
+  // Delete all contacts of a company
+  deleteAllForCompany: (userid: number) => 
+    api.delete<{ message: string }>(`/contacts/company/${userid}`),
+
+};
+
+
+// E:\SVG\crm\frontend\src\lib\api.ts (add this to your existing api.ts)
+
+// Service type
+export interface ServiceType {
+  id: number;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  created_by: number;
+  updated_by: number;
+  created_by_name?: string;
+  updated_by_name?: string;
+}
+
+export interface ServiceTypesResponse {
+  data: ServiceType[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export const serviceTypesApi = {
+ 
+  getAll: () => 
+   api.get<ServiceType[]>("/service-types/all"),
+
+  // Get single service type by ID
+  getById: (id: number) => 
+    api.get<ServiceType>(`/service-types/${id}`),
+
+  // Create new service type
+  create: (data: { name: string }) => 
+    api.post<{ id: number; message: string }>("/service-types", data),
+
+  // Update service type
+  update: (id: number, data: { name: string }) => 
+    api.put<{ message: string }>(`/service-types/${id}`, data),
+
+  // Delete single service type
+  delete: (id: number) => 
+    api.delete<{ message: string }>(`/service-types/${id}`),
+
+  // Delete all service types
+  deleteAll: () => 
+    api.delete<{ message: string }>("/service-types"),
+};
 
 export default api;

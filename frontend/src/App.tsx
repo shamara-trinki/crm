@@ -11,7 +11,10 @@ import Dashboard from "@/pages/Dashboard";
 import UsersPage from "@/pages/Users";
 import RolesPage from "@/pages/Roles";
 import NotFound from "./pages/NotFound";
-import CustomersPage from "@/pages/customers/index";
+import CustomersPage from "@/pages/Customers";
+import ContactsPage from "@/pages/Contact";
+import ServiceTypesPage from "@/pages/ServiceTypes";
+import PaymentTransaction from './pages/PaymentTransaction';
 
 const queryClient = new QueryClient();
 
@@ -35,7 +38,11 @@ const App = () => (
               <Route path="/users" element={<UsersPage />} />
               <Route path="/roles" element={<RolesPage />} />
               <Route path="/customers" element={<CustomersPage />} />
+              <Route path="/contacts/:userid" element={<ContactsPage />} />
+              <Route path="/service-types" element={<ServiceTypesPage />} />
+               <Route path="/payment" element={<PaymentTransaction />} />
             </Route>
+           
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
