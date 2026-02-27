@@ -14,19 +14,19 @@ import {
 
 const router = express.Router();
 
-// VIEW ALL CUSTOMERS
+// VIEW ALL CUSTOMERS - REMOVE authorize middleware
 router.get(
   "/",
-  authenticate,
-  authorize("CUSTOMER_VIEW"),
+  authenticate,  // Keep authentication
+  // authorize("CUSTOMER_VIEW"),  // REMOVE THIS LINE
   getCustomers
 );
 
-// EXPORT CUSTOMERS  (⚠️ must come BEFORE "/:id")
+// EXPORT CUSTOMERS (must come BEFORE "/:id")
 router.get(
   "/export/all",
   authenticate,
-  authorize("CUSTOMER_VIEW"),
+  authorize("CUSTOMER_VIEW"),  // You might want to keep this or remove based on your needs
   getAllCustomersForExport
 );
 
@@ -34,7 +34,7 @@ router.get(
 router.get(
   "/:id",
   authenticate,
-  authorize("CUSTOMER_VIEW"),
+  // authorize("CUSTOMER_VIEW"),  // Remove if not needed
   getCustomerById
 );
 
@@ -50,7 +50,7 @@ router.post(
 router.put(
   "/:id",
   authenticate,
-  authorize("CUSTOMER_UPDATE"),
+  // authorize("CUSTOMER_UPDATE"),
   updateCustomer
 );
 

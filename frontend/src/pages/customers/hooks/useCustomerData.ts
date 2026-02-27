@@ -205,7 +205,7 @@ export const useCustomerData = () => {
 
   // Navigation
   const handleContactClick = (customerId: number) => {
-    navigate(`/contact/${customerId}`);
+    navigate(`/contacts/${customerId}`);
   };
 
   // Pagination

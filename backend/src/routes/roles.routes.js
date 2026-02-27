@@ -4,6 +4,7 @@ import {
   assignPermissions,
   listRoles,
   getRoleById,
+  deleteRole
 } from "../controllers/roles.controller.js";
 import { authenticate } from "../middleware/authenticate.js";
 import { authorize } from "../middleware/authorize.js";
@@ -33,5 +34,10 @@ router.get("/:id",
   getRoleById
 );
 
+router.delete("/:roleId",
+  authenticate,
+  authorize("ROLE_DELETE"),
+  deleteRole
+);
 
 export default router;

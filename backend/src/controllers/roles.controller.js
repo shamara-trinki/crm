@@ -15,8 +15,6 @@ export async function createRole(req, res) {
 }
 
 // Assign permissions to a role
-// E:\SVG\crm\backend\src\controllers\roles.controller.js
-
 export async function assignPermissions(req, res) {
   const { roleId } = req.params;
   const { permissions } = req.body; // array of permission IDs
@@ -160,4 +158,126 @@ export async function getRoleById(req, res) {
   role.permissions = permissions;
 
   return res.json(role);
+}
+
+// Delete a role by ID
+export async function deleteRole(req, res) {
+  const { roleId } = req.params;
+  const currentUserId = req.user?.id; // Assuming you have user info from auth middleware
+
+  console.log('=== Delete Role Debug ===');
+  console.log('roleId:', roleId);
+  console.log('currentUserId:', currentUserId);
+
+  try {
+    // Validate input
+    if (!roleId) {
+      return res.status(400).json({ message: "Role ID is required" });
+    }
+
+    // Check if role exists
+    console.log('Checking if role exists...');
+    const [roleCheck] = await db.query(`SELECT id, name FROM roles WHERE id=?`, [roleId]);
+    console.log('Role check result:', roleCheck);
+    
+    if (roleCheck.length === 0) {
+      console.log('Role not found');
+      return res.status(404).json({ message: "Role not found" });
+    }
+
+    // Prevent deletion of Super Admin role
+    if (roleCheck[0].name === "Super Admin") {
+      console.log('Attempted to delete Super Admin role');
+      return res.status(403).json({ message: "Cannot delete Super Admin role" });
+    }
+
+    // Check if current user has this role
+    console.log('Checking if current user has this role...');
+    const [userRoleCheck] = await db.query(
+      `SELECT role_id FROM users WHERE id=? AND role_id=?`, 
+      [currentUserId, roleId]
+    );
+    
+    if (userRoleCheck.length > 0) {
+      console.log('User cannot delete their own role');
+      return res.status(403).json({ 
+        message: "You cannot delete your own role. Please ask another administrator to perform this action." 
+      });
+    }
+
+    // Check if role is assigned to any users (other than current user)
+    console.log('Checking if role is assigned to other users...');
+    const [userCheck] = await db.query(
+      `SELECT COUNT(*) as count, 
+       GROUP_CONCAT(id) as userIds,
+       GROUP_CONCAT(username) as usernames 
+       FROM users WHERE role_id=? AND id != ?`, 
+      [roleId, currentUserId]
+    );
+    console.log('User check result:', userCheck);
+    
+    if (userCheck[0].count > 0) {
+      console.log(`Role is assigned to ${userCheck[0].count} other users`);
+      
+      // Optional: Return list of affected users
+      const affectedUsers = userCheck[0].usernames ? userCheck[0].usernames.split(',') : [];
+      
+      return res.status(400).json({ 
+        message: "Role is assigned to other users. Please reassign these users to a different role first.",
+        assignedUsers: {
+          count: userCheck[0].count,
+          userIds: userCheck[0].userIds ? userCheck[0].userIds.split(',') : [],
+          usernames: affectedUsers
+        }
+      });
+    }
+
+    // Start transaction
+    console.log('Starting transaction...');
+    await db.query('START TRANSACTION');
+
+    // Delete role permissions first (foreign key constraint)
+    console.log('Deleting role permissions...');
+    const deletePermissionsResult = await db.query(
+      `DELETE FROM role_permissions WHERE role_id=?`, 
+      [roleId]
+    );
+    console.log('Delete permissions result:', deletePermissionsResult);
+
+    // Delete the role
+    console.log('Deleting role...');
+    const deleteRoleResult = await db.query(
+      `DELETE FROM roles WHERE id=?`, 
+      [roleId]
+    );
+    console.log('Delete role result:', deleteRoleResult);
+
+    // Commit transaction
+    console.log('Committing transaction...');
+    await db.query('COMMIT');
+    
+    console.log('Role deleted successfully');
+    return res.status(200).json({ 
+      message: "Role deleted successfully",
+      deletedRole: roleCheck[0].name
+    });
+
+  } catch (error) {
+    // Rollback on error
+    console.log('Error occurred, rolling back...');
+    await db.query('ROLLBACK');
+    
+    console.error('=== Error in deleteRole ===');
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error code:', error.code);
+    console.error('Error sql:', error.sql);
+    console.error('Error sqlMessage:', error.sqlMessage);
+    
+    return res.status(500).json({ 
+      message: "Failed to delete role",
+      error: error.message,
+      sqlError: error.sqlMessage 
+    });
+  }
 }
