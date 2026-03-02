@@ -1,85 +1,3 @@
-// import { useAuth } from "@/contexts/AuthContext";
-// import { Users, Shield, Activity, UserCheck } from "lucide-react";
-// import { motion } from "framer-motion";
-// import { PermissionGate } from "@/components/PermissionGate";
-
-// const statCards = [
-//   {
-//     title: "User Management",
-//     description: "Create and manage system users",
-//     icon: Users,
-//     permission: "USER_VIEW",
-//     href: "/users",
-//     color: "bg-primary/10 text-primary",
-//   },
-//   {
-//     title: "Role Management",
-//     description: "Configure roles and permissions",
-//     icon: Shield,
-//     permission: "ROLE_VIEW",
-//     href: "/roles",
-//     color: "bg-info/10 text-info",
-//   },
-//   {
-//     title: "Customers",
-//     description: "Manage customer relationships",
-//     icon: UserCheck,
-//     permission: "CUSTOMER_VIEW",
-//     href: "/customers",
-//     color: "bg-success/10 text-success",
-//   },
-// ];
-
-// const Dashboard = () => {
-//   const { user } = useAuth();
-
-//   return (
-//     <div>
-//       <div className="crm-page-header">
-//         <h1 className="crm-page-title">Dashboard</h1>
-//         <p className="crm-page-subtitle">Welcome back to your CRM workspace</p>
-//       </div>
-
-//       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-//         {statCards.map((card, i) => (
-//           <PermissionGate key={card.title} permission={card.permission}>
-//             <motion.a
-//               href={card.href}
-//               initial={{ opacity: 0, y: 16 }}
-//               animate={{ opacity: 1, y: 0 }}
-//               transition={{ delay: i * 0.1 }}
-//               className="crm-stat-card flex items-start gap-4 cursor-pointer group"
-//             >
-//               <div className={`p-3 rounded-lg ${card.color}`}>
-//                 <card.icon className="w-5 h-5" />
-//               </div>
-//               <div>
-//                 <h3 className="font-medium text-foreground group-hover:text-primary transition-colors">
-//                   {card.title}
-//                 </h3>
-//                 <p className="text-sm text-muted-foreground mt-0.5">{card.description}</p>
-//               </div>
-//             </motion.a>
-//           </PermissionGate>
-//         ))}
-//       </div>
-
-//       <div className="mt-8 crm-stat-card">
-//         <div className="flex items-center gap-3 mb-4">
-//           <Activity className="w-5 h-5 text-muted-foreground" />
-//           <h2 className="font-medium text-foreground">Quick Overview</h2>
-//         </div>
-//         <p className="text-sm text-muted-foreground">
-//           Your CRM system is up and running. Use the sidebar to navigate between modules.
-//           Only features you have permission to access are visible.
-//         </p>
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default Dashboard;
-
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Users,
@@ -91,163 +9,66 @@ import {
   UserCheck,
   FileText
 } from "lucide-react";
-import { Users, Shield, UserCheck, Activity } from "lucide-react";
 import { motion } from "framer-motion";
 import { PermissionGate } from "@/components/PermissionGate";
 import NaviBar from "@/components/ui/NaviBar";
 
-const statCards = [
-  {
-    title: "All Customers",
-    description: "Global directory",
-    icon: Users,
-    permission: "CUSTOMER_VIEW",
-    href: "/customers",
-    bgGradient: "from-blue-500 to-blue-600",
-  },
-  {
-    title: "AMC Customers",
-    description: "Annual Contracts",
-    icon: Settings,
-    permission: "CUSTOMER_VIEW",
-    href: "/customers/amc",
-    bgGradient: "from-purple-500 to-purple-600",
-  },
-  {
-    title: "Visit Customers",
-    description: "On-site support",
-    icon: Building2,
-    permission: "CUSTOMER_VIEW",
-    href: "/customers/visits",
-    bgGradient: "from-amber-500 to-orange-500",
-  },
-  {
-    title: "Implementation",
-    description: "Project setups",
-    icon: Briefcase,
-    permission: "CUSTOMER_VIEW",
-    href: "/customers/implementation",
-    bgGradient: "from-emerald-500 to-teal-600",
-  },
-  {
-    title: "Call Management",
-    description: "Support tracking",
-    icon: PhoneCall,
-    permission: "CUSTOMER_VIEW",
-    href: "/calls",
-    bgGradient: "from-rose-500 to-red-600",
-  },
-  {
-    title: "Appointments",
-    description: "Client meetings",
-    icon: Calendar,
-    permission: "CUSTOMER_VIEW",
-    href: "/appointments",
-    bgGradient: "from-indigo-500 to-indigo-600",
-  },
-  {
-    title: "Accounts",
-    description: "Financial records",
-    icon: UserCheck,
-    permission: "CUSTOMER_VIEW",
-    href: "/accounts",
-    bgGradient: "from-sky-500 to-sky-600",
-  },
-  {
-    title: "Reports",
-    description: "Data analytics",
-    icon: FileText,
-    permission: "CUSTOMER_VIEW",
-    href: "/reports",
-    bgGradient: "from-slate-600 to-slate-700",
-  },
+const navItems = [
+  { title: "All Customers", description: "Global directory", icon: Users, href: "/customers", gradient: "from-blue-500 to-blue-600", permission: "CUSTOMER_VIEW" },
+  { title: "AMC Customers", description: "Annual Contracts", icon: Settings, href: "/customers/amc", gradient: "from-purple-500 to-purple-600", permission: "CUSTOMER_VIEW" },
+  { title: "Visit Customers", description: "On-site support", icon: Building2, href: "/customers/visits", gradient: "from-orange-500 to-orange-600", permission: "CUSTOMER_VIEW" },
+  { title: "Implementation", description: "Project setups", icon: Briefcase, href: "/customers/implementation", gradient: "from-emerald-500 to-teal-600", permission: "CUSTOMER_VIEW" },
+  { title: "Call Management", description: "Support tracking", icon: PhoneCall, href: "/calls", gradient: "from-rose-500 to-red-600", permission: "CUSTOMER_VIEW" },
+  { title: "Appointments", description: "Client meetings", icon: Calendar, href: "/appointments", gradient: "from-indigo-500 to-indigo-600", permission: "CUSTOMER_VIEW" },
+  { title: "Accounts", description: "Financial records", icon: UserCheck, href: "/accounts", gradient: "from-sky-500 to-sky-600", permission: "CUSTOMER_VIEW" },
+  { title: "Reports", description: "Data analytics", icon: FileText, href: "/reports", gradient: "from-slate-600 to-slate-700", permission: "CUSTOMER_VIEW" },
 ];
 
 const Dashboard = () => {
+  const { user } = useAuth(); //
+
   return (
     <div className="min-h-screen bg-[#f8fafc]">
-      <NaviBar />
-    <div>
-      <div className="crm-page-header">
-        <h1 className="crm-page-title">Dashboard</h1>
-        <p className="crm-page-subtitle">
-          Welcome back{user?.username ? `, ${user.username}` : ''} to your CRM workspace
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {/* Permission-protected cards */}
-        {statCards.map((card, i) => (
-          <PermissionGate key={card.title} permission={card.permission}>
-            <motion.a
-              href={card.href}
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.1 }}
-              className="crm-stat-card flex items-start gap-4 cursor-pointer group hover:scale-105 transition-all duration-200"
-            >
-              <div className={`p-3 rounded-lg ${card.color}`}>
-                <card.icon className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-medium text-foreground group-hover:text-primary transition-colors">
-                  {card.title}
-                </h3>
-                <p className="text-sm text-muted-foreground mt-0.5">{card.description}</p>
-              </div>
-            </motion.a>
-          </PermissionGate>
-        ))}
-
-        {/* Customer card - always visible */}
-        <motion.a
-          href="/customers"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: statCards.length * 0.1 }}
-          className="crm-stat-card flex items-start gap-4 cursor-pointer group hover:scale-105 transition-all duration-200"
-        >
-          <div className="p-3 rounded-lg bg-success/10 text-success">
-            <UserCheck className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="font-medium text-foreground group-hover:text-primary transition-colors">
-              Customers
-            </h3>
-            <p className="text-sm text-muted-foreground mt-0.5">Manage customer relationships</p>
-          </div>
-        </motion.a>
-      </div>
-
-      <main className="p-8 max-w-[1600px] mx-auto space-y-10">
+      <NaviBar />      
+      <main className="p-8 max-w-[1600px] mx-auto">
+        {/* Main Gradient Cards Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {statCards.map((card, i) => (
-            <PermissionGate key={card.title} permission={card.permission}>
+          {navItems.map((item, i) => (
+            <PermissionGate key={item.title} permission={item.permission}>
               <motion.a
-                href={card.href}
+                href={item.href}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
                 whileHover={{ y: -8, scale: 1.02 }}
-                className={`p-6 rounded-3xl bg-gradient-to-br ${card.bgGradient} text-white shadow-lg h-44 flex flex-col justify-between`}
+                className={`relative overflow-hidden p-6 h-48 rounded-[2rem] bg-gradient-to-br ${item.gradient} text-white shadow-lg flex flex-col justify-between transition-all duration-300 hover:shadow-2xl`}
               >
-                <card.icon className="w-6 h-6" />
+                {/* Icon with subtle background */}
+                <div className="bg-white/20 w-fit p-3 rounded-2xl">
+                  <item.icon className="w-6 h-6 text-white" />
+                </div>
+                
                 <div>
-                  <h3 className="font-bold text-lg">{card.title}</h3>
-                  <p className="text-white/80 text-xs">
-                    {card.description}
+                  <h3 className="text-xl font-bold leading-tight">{item.title}</h3>
+                  <p className="text-sm text-white/80 font-medium mt-1">
+                    {item.description}
                   </p>
                 </div>
+                
+                {/* Subtle design element for professional look */}
+                <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-2xl" />
               </motion.a>
             </PermissionGate>
           ))}
         </div>
+
+        {/* System Status Footer */}
+        <div className="mt-16 pt-6 border-t border-slate-200">
+          <p className="text-sm text-slate-400">
+            System is active. Only authorized modules are displayed.
+          </p>
+        </div>
       </main>
-        <p className="text-sm text-muted-foreground">
-          Your CRM system is up and running. Use the cards above to navigate to different modules.
-          Only features you have permission to access are visible.
-        </p>
-      </div>
     </div>
   );
 };

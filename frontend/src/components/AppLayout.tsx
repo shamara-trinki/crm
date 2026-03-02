@@ -38,14 +38,6 @@ interface NavItemProps {
   depth?: number;
 }
 
-
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, href: "/", permission: null },
-  { label: "Users", icon: Users, href: "/users", permission: "USER_VIEW" },
-  { label: "Roles", icon: Shield, href: "/roles", permission: "ROLE_VIEW" },
-  { label: "Customers", icon: UserCheck, href: "/customers", permission: "CUSTOMER_VIEW" },
-  { label: "JobScedule", icon: UserCheck, href: "/job-schedule", permission: "CUSTOMER_VIEW" },
-
 // Navigation configuration
 const navItems: NavItem[] = [
   { 
@@ -91,7 +83,7 @@ const navItems: NavItem[] = [
       },
     ]
   },
-
+  { label: "JobScedule", icon: UserCheck, href: "/job-schedule", permission: "CUSTOMER_VIEW" },
 ];
 
 // Sidebar width constants
@@ -329,8 +321,8 @@ const AppLayout = () => {
             {/* User info - only show when expanded */}
             {sidebarOpen && user && (
               <div className="px-3 py-2 text-xs text-sidebar-foreground/70">
-                <p className="font-medium truncate">{user.name || user.email}</p>
-                <p className="truncate">{user.email}</p>
+                {/* <p className="font-medium truncate">{user.name || user.email}</p>
+                <p className="truncate">{user.email}</p> */}
               </div>
             )}
             

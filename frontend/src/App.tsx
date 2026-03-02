@@ -14,7 +14,7 @@ import NotFound from "./pages/NotFound";
 import CustomersPage from "@/pages/customers/index";
 import JobSchedule from "@/pages/JobSchedule";
 import JobScheduleList from "@/pages/JobScheduleList";
-import CustomersPage from "@/pages/Customers";
+// import CustomersPage from "@/pages/Customers";
 import ContactsPage from "@/pages/Contact";
 import ServiceTypesPage from "@/pages/ServiceTypes";
 import PaymentTransaction from './pages/PaymentTransaction';
