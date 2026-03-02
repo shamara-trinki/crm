@@ -14,7 +14,7 @@ const CustomersPage = () => {
   const data = useCustomerData();
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div>
       <CustomersHeader
         selectedCustomers={data.selectedCustomers}
         onBulkDeleteClick={() => data.setBulkDeleteDialogOpen(true)}

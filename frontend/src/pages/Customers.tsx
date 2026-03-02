@@ -1,7 +1,10 @@
+// E:\SVG\crm\frontend\src\pages\Customers.tsx
+
 import React, { useState, useEffect, useRef } from "react";
 import { customersApi, type Customer } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
+import { useFieldPermissions } from "@/hooks/useFieldPermissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,6 +47,20 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuItem,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuPortal,
+  DropdownMenuSubContent,
+} from "@/components/ui/dropdown-menu";
+import { Progress } from "@/components/ui/progress";
+import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -60,7 +77,6 @@ import {
   FileText,
   Clock,
   Settings2,
-  MoreHorizontal,
   Mail,
   Edit,
   Trash2,
@@ -73,27 +89,16 @@ import {
   AlertCircle,
   CheckCircle2,
   XCircle,
-  RefreshCw,
   PlusCircle,
+  Eye,
+  EyeOff,
+  Lock,
+  HelpCircle,
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuItem,
-  DropdownMenuCheckboxItem,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuPortal,
-  DropdownMenuSubContent,
-} from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { Progress } from "@/components/ui/progress";
 
 // Interface for import preview data
 interface ImportPreview {
@@ -103,8 +108,25 @@ interface ImportPreview {
   isValid: boolean;
 }
 
+// Interface for column visibility
+interface ColumnConfig {
+  key: string;
+  label: string;
+  defaultVisible: boolean;
+  icon: any;
+  description?: string;
+}
+
 const CustomersPage = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const { 
+    canViewField, 
+    canUpdateField, 
+    canCreate, 
+    canDelete,
+  } = useFieldPermissions('CUSTOMER');
+
   // State
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,29 +135,20 @@ const CustomersPage = () => {
   const [search, setSearch] = useState("");
   const [totalPages, setTotalPages] = useState(1);
   const [totalCustomers, setTotalCustomers] = useState(0);
+  const [updateableFields, setUpdateableFields] = useState<string[]>([]);
 
-  // Selection state for bulk delete
+  // Selection state
   const [selectedCustomers, setSelectedCustomers] = useState<number[]>([]);
   const [selectAll, setSelectAll] = useState(false);
 
   // Edit dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [editFormData, setEditFormData] = useState<Partial<Customer>>({});
 
-  // Edit form state - all fields except ID
-  const [editFormData, setEditFormData] = useState({
-    company: "",
-    phonenumber: "",
-    city: "",
-    address: "",
-    note: "",
-    status: "",
-    type: "",
-    active: 1,
-  });
   // Create dialog state
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [createFormData, setCreateFormData] = useState({
+  const [createFormData, setCreateFormData] = useState<Partial<Customer>>({
     company: "",
     phonenumber: "",
     city: "",
@@ -146,11 +159,13 @@ const CustomersPage = () => {
     active: 1,
   });
 
-  // Delete confirmation dialog state
+  // View details dialog state
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
+
+  // Delete confirmation state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [customerToDelete, setCustomerToDelete] = useState<number | null>(null);
-
-  // Bulk delete confirmation dialog state
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
 
   // Import state
@@ -158,94 +173,142 @@ const CustomersPage = () => {
   const [importPreview, setImportPreview] = useState<ImportPreview[]>([]);
   const [importLoading, setImportLoading] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
-  const [importSuccess, setImportSuccess] = useState<number>(0);
-  const [importErrors, setImportErrors] = useState<number>(0);
+  const [importSuccess, setImportSuccess] = useState(0);
+  const [importErrors, setImportErrors] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isPaginationRef = useRef(false);
 
-  const { toast } = useToast();
+  // Column visibility state
+  const [columnHelpOpen, setColumnHelpOpen] = useState(false);
 
-  // Debounce search (wait 500ms after user stops typing)
-  const debouncedSearch = useDebounce(search, 500);
-
-  // Define all available columns with icons for ALL columns
-  const AVAILABLE_COLUMNS = [
-    { key: "userid", label: "ID", defaultVisible: true, icon: Hash },
-    { key: "company", label: "Company", defaultVisible: true, icon: Building2 },
-    { key: "phonenumber", label: "Phone", defaultVisible: true, icon: Phone },
-    { key: "city", label: "City", defaultVisible: true, icon: MapPin },
-    { key: "address", label: "Address", defaultVisible: true, icon: MapPin },
-    {
-      key: "datecreated",
-      label: "Date Created",
-      defaultVisible: false,
+  // Define all available columns with icons and descriptions
+  const ALL_COLUMNS: ColumnConfig[] = [
+    { 
+      key: "userid", 
+      label: "ID", 
+      defaultVisible: true, 
+      icon: Hash,
+      description: "Unique customer identifier" 
+    },
+    { 
+      key: "company", 
+      label: "Company", 
+      defaultVisible: true, 
+      icon: Building2,
+      description: "Customer company or organization name" 
+    },
+    { 
+      key: "phonenumber", 
+      label: "Phone", 
+      defaultVisible: true, 
+      icon: Phone,
+      description: "Primary contact phone number" 
+    },
+    { 
+      key: "city", 
+      label: "City", 
+      defaultVisible: true, 
+      icon: MapPin,
+      description: "Customer city location" 
+    },
+    { 
+      key: "address", 
+      label: "Address", 
+      defaultVisible: true, 
+      icon: MapPinned,
+      description: "Street address" 
+    },
+    { 
+      key: "datecreated", 
+      label: "Date Created", 
+      defaultVisible: false, 
       icon: Calendar,
+      description: "Customer registration date" 
     },
-    {
-      key: "active",
-      label: "Active",
-      defaultVisible: false,
+    { 
+      key: "active", 
+      label: "Active", 
+      defaultVisible: false, 
       icon: CheckCircle,
+      description: "Whether customer is active" 
     },
-    { key: "type", label: "Type", defaultVisible: false, icon: Tag },
-    { key: "note", label: "Note", defaultVisible: false, icon: FileText },
-    { key: "status", label: "Status", defaultVisible: false, icon: Clock },
+    { 
+      key: "type", 
+      label: "Type", 
+      defaultVisible: false, 
+      icon: Tag,
+      description: "Customer type (business/individual)" 
+    },
+    { 
+      key: "note", 
+      label: "Note", 
+      defaultVisible: false, 
+      icon: FileText,
+      description: "Additional notes about customer" 
+    },
+    { 
+      key: "status", 
+      label: "Status", 
+      defaultVisible: false, 
+      icon: Clock,
+      description: "Current customer status" 
+    },
   ];
 
-  // Define required and optional fields for import validation
-  const REQUIRED_FIELDS = ["company"] as const;
-  const OPTIONAL_FIELDS = [
-    "phonenumber",
-    "city",
-    "address",
-    "note",
-    "status",
-    "type",
-    "active",
-  ] as const;
+  // Filter columns based on view permissions
+  const AVAILABLE_COLUMNS = ALL_COLUMNS.filter(col => canViewField(col.key));
 
-  // State to track which columns are visible with localStorage persistence
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
+  // Status options
+  const statusOptions = [
+    { value: "finished", label: "Finished", color: "bg-green-500" },
+    { value: "implementation", label: "Implementation", color: "bg-yellow-500" },
+    { value: "not finished", label: "Not Finished", color: "bg-red-500" },
+  ];
+
+  // Type options
+  const typeOptions = [
+    { value: "amc", label: "AMC" },
+    { value: "visit", label: "Visit" },
+  ];
+
+  // Column visibility state with permission filtering
+const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
+  // Get default visible columns based on permissions
+  const defaultColumns = AVAILABLE_COLUMNS
+    .filter(col => col.defaultVisible)
+    .map(col => col.key);
+  
+  try {
     const saved = localStorage.getItem("customerColumns");
     if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return AVAILABLE_COLUMNS.filter((col) => col.defaultVisible).map(
-          (col) => col.key,
-        );
+      const parsed = JSON.parse(saved);
+      // Only keep saved columns that user still has permission to view
+      const filteredSaved = parsed.filter((key: string) => 
+        AVAILABLE_COLUMNS.some(col => col.key === key)
+      );
+      
+      // If after filtering we have columns, use them
+      if (filteredSaved.length > 0) {
+        return filteredSaved;
       }
     }
-    return AVAILABLE_COLUMNS.filter((col) => col.defaultVisible).map(
-      (col) => col.key,
-    );
-  });
+  } catch (error) {
+    console.error("Error parsing saved columns:", error);
+  }
+  
+  // Always fall back to default columns if no valid saved columns exist
+  return defaultColumns;
+});
 
-  // Status options for dropdown
-  const statusOptions = [
-    {
-      value: "implementation",
-      label: "Implementation",
-      color: "bg-yellow-500",
-    },
-    { value: "finished", label: "Finished", color: "bg-green-500" },
-    { value: "not-finished", label: "Not finished", color: "bg-red-500" },
-  ];
+  // Debounce search
+  const debouncedSearch = useDebounce(search, 500);
 
-  // Type options for dropdown
-  const typeOptions = [
-    { value: "business", label: "Business" },
-    { value: "individual", label: "Individual" },
-    { value: "enterprise", label: "Enterprise" },
-    { value: "government", label: "Government" },
-    { value: "non-profit", label: "Non-Profit" },
-  ];
-
-  // Save to localStorage whenever visible columns change
+  // Save column visibility
   useEffect(() => {
     localStorage.setItem("customerColumns", JSON.stringify(visibleColumns));
   }, [visibleColumns]);
 
-  // Fetch customers when page, limit, or debounced search changes
+  // Fetch customers
   useEffect(() => {
     fetchCustomers();
   }, [page, limit, debouncedSearch]);
@@ -257,29 +320,42 @@ const CustomersPage = () => {
   }, [customers]);
 
   const fetchCustomers = async () => {
-    setLoading(true);
-    try {
-      const response = await customersApi.list({
-        page,
-        limit,
-        search: debouncedSearch,
-      });
+  const scrollY = window.scrollY; // Save scroll position
+  setLoading(true);
+  try {
+    const response = await customersApi.list({
+      page,
+      limit,
+      search: debouncedSearch,
+    });
 
-      setCustomers(response.data.data);
-      setTotalPages(response.data.totalPages);
-      setTotalCustomers(response.data.total);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to load customers",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
+    setCustomers(response.data.data);
+    setTotalPages(response.data.totalPages);
+    setTotalCustomers(response.data.total);
+    
+    if (response.data.permissions?.updateableFields) {
+      setUpdateableFields(response.data.permissions.updateableFields);
     }
+  } catch (error) {
+    toast({
+      title: "Error",
+      description: "Failed to load customers",
+      variant: "destructive",
+    });
+  } finally {
+    setLoading(false);
+    setTimeout(() => window.scrollTo(0, scrollY), 0);
+    isPaginationRef.current = false;
+  }
+};
+  // Get visible columns based on permissions
+  const getVisibleColumns = () => {
+    return AVAILABLE_COLUMNS.filter(col => 
+      visibleColumns.includes(col.key)
+    );
   };
 
-  // Handle create button click - reset form
+  // Handle create
   const handleCreateClick = () => {
     setCreateFormData({
       company: "",
@@ -294,10 +370,8 @@ const CustomersPage = () => {
     setCreateDialogOpen(true);
   };
 
-  // Handle save new customer
   const handleSaveCreate = async () => {
-    // Validate required fields
-    if (!createFormData.company.trim()) {
+    if (!createFormData.company?.trim()) {
       toast({
         title: "Validation Error",
         description: "Company name is required",
@@ -308,14 +382,12 @@ const CustomersPage = () => {
 
     try {
       await customersApi.create(createFormData);
-
       toast({
         title: "Success",
         description: "Customer created successfully",
       });
-
       setCreateDialogOpen(false);
-      fetchCustomers(); // Refresh the list
+      fetchCustomers();
     } catch (error) {
       toast({
         title: "Error",
@@ -325,120 +397,90 @@ const CustomersPage = () => {
     }
   };
 
-  // Add this new function to fetch all customers for export
-  const fetchAllCustomersForExport = async (): Promise<Customer[]> => {
-    try {
-      // First, get the total count
-      const initialResponse = await customersApi.list({ page: 1, limit: 1 });
-      const totalCount = initialResponse.data.total;
-
-      // Fetch all customers in one request
-      const response = await customersApi.list({
-        page: 1,
-        limit: totalCount,
-        search: debouncedSearch, // Preserve search if any
-      });
-
-      return response.data.data;
-    } catch (error) {
-      console.error("Error fetching all customers:", error);
-      throw error;
-    }
+  // Handle view
+  const handleViewClick = (customer: Customer) => {
+    setViewingCustomer(customer);
+    setViewDialogOpen(true);
   };
 
-  // Reset to page 1 when search changes
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch]);
-
-  // Pagination handlers
-  const handleFirstPage = () => setPage(1);
-  const handlePrevPage = () => setPage((p) => Math.max(1, p - 1));
-  const handleNextPage = () => setPage((p) => Math.min(totalPages, p + 1));
-  const handleLastPage = () => setPage(totalPages);
-
-  // Clear search
-  const handleClearSearch = () => {
-    setSearch("");
-  };
-
-  // Handle select all customers
-  const handleSelectAll = () => {
-    if (selectAll) {
-      setSelectedCustomers([]);
-    } else {
-      setSelectedCustomers(customers.map((c) => c.userid));
-    }
-    setSelectAll(!selectAll);
-  };
-
-  // Handle select single customer
-  const handleSelectCustomer = (customerId: number) => {
-    if (selectedCustomers.includes(customerId)) {
-      setSelectedCustomers(selectedCustomers.filter((id) => id !== customerId));
-      setSelectAll(false);
-    } else {
-      setSelectedCustomers([...selectedCustomers, customerId]);
-    }
-  };
-
-  // Handle edit button click - populate form with all customer data
+  // Handle edit
   const handleEditClick = (customer: Customer) => {
-    setEditingCustomer(customer);
-    setEditFormData({
-      company: customer.company || "",
-      phonenumber: customer.phonenumber || "",
-      city: customer.city || "",
-      address: customer.address || "",
-      note: customer.note || "",
-      status: customer.status || "",
-      type: customer.type || "",
-      active: customer.active,
+    // Only include fields user can view
+    const formData: Partial<Customer> = {};
+    AVAILABLE_COLUMNS.forEach(col => {
+      if (customer[col.key as keyof Customer] !== undefined) {
+        formData[col.key as keyof Customer] = customer[col.key as keyof Customer];
+      }
     });
+    
+    setEditingCustomer(customer);
+    setEditFormData(formData);
     setEditDialogOpen(true);
   };
 
-  // Handle form input changes
   const handleFormChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setEditFormData((prev) => ({
+    
+    if (!canUpdateField(name)) {
+      toast({
+        title: "Permission Denied",
+        description: `You don't have permission to update the ${name} field`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setEditFormData(prev => ({
       ...prev,
       [name]: value,
     }));
   };
 
-  // Handle select changes - for status and type
   const handleSelectChange = (name: string, value: string) => {
-    setEditFormData((prev) => ({
+    if (!canUpdateField(name)) {
+      toast({
+        title: "Permission Denied",
+        description: `You don't have permission to update the ${name} field`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setEditFormData(prev => ({
       ...prev,
-      [name]: value,
+      [name]: value === "none" ? "" : value,
     }));
   };
 
-  // Handle active checkbox change
   const handleActiveChange = (checked: boolean) => {
-    setEditFormData((prev) => ({
+    if (!canUpdateField("active")) {
+      toast({
+        title: "Permission Denied",
+        description: "You don't have permission to update the active status",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setEditFormData(prev => ({
       ...prev,
       active: checked ? 1 : 0,
     }));
   };
 
-  // Handle save edit
   const handleSaveEdit = async () => {
     if (!editingCustomer) return;
 
     try {
       await customersApi.update(editingCustomer.userid, editFormData);
-
       toast({
         title: "Success",
         description: "Customer updated successfully",
       });
-
       setEditDialogOpen(false);
-      fetchCustomers(); // Refresh the list
+      fetchCustomers();
     } catch (error) {
       toast({
         title: "Error",
@@ -448,27 +490,32 @@ const CustomersPage = () => {
     }
   };
 
-  // Handle delete button click
+  // Handle delete
   const handleDeleteClick = (customerId: number) => {
+    if (!canDelete()) {
+      toast({
+        title: "Permission Denied",
+        description: "You don't have permission to delete customers",
+        variant: "destructive",
+      });
+      return;
+    }
     setCustomerToDelete(customerId);
     setDeleteDialogOpen(true);
   };
 
-  // Handle confirm delete
   const handleConfirmDelete = async () => {
     if (!customerToDelete) return;
 
     try {
       await customersApi.delete(customerToDelete);
-
       toast({
         title: "Success",
         description: "Customer deleted successfully",
       });
-
       setDeleteDialogOpen(false);
       setCustomerToDelete(null);
-      fetchCustomers(); // Refresh the list
+      fetchCustomers();
     } catch (error) {
       toast({
         title: "Error",
@@ -480,21 +527,18 @@ const CustomersPage = () => {
 
   // Handle bulk delete
   const handleBulkDelete = async () => {
-    if (selectedCustomers.length === 0) return;
+    if (!canDelete()) return;
 
     try {
-      // Delete each selected customer
-      await Promise.all(selectedCustomers.map((id) => customersApi.delete(id)));
-
+      await Promise.all(selectedCustomers.map(id => customersApi.delete(id)));
       toast({
         title: "Success",
         description: `${selectedCustomers.length} customers deleted successfully`,
       });
-
       setBulkDeleteDialogOpen(false);
       setSelectedCustomers([]);
       setSelectAll(false);
-      fetchCustomers(); // Refresh the list
+      fetchCustomers();
     } catch (error) {
       toast({
         title: "Error",
@@ -504,25 +548,41 @@ const CustomersPage = () => {
     }
   };
 
-  // Handle contact button click
-  const handleContactClick = (customerId: number) => {
-    navigate(`/contact/${customerId}`);
+  // Handle selection
+  const handleSelectAll = () => {
+    if (selectAll) {
+      setSelectedCustomers([]);
+    } else {
+      setSelectedCustomers(customers.map(c => c.userid));
+    }
+    setSelectAll(!selectAll);
   };
 
-  // Helper function to render active badge
-  const renderActiveBadge = (isActive: number) => {
-    if (isActive === 1) {
-      return (
-        <Badge variant="default" className="bg-green-500 hover:bg-green-600">
-          Active
-        </Badge>
-      );
+  const handleSelectCustomer = (customerId: number) => {
+    if (selectedCustomers.includes(customerId)) {
+      setSelectedCustomers(selectedCustomers.filter(id => id !== customerId));
+      setSelectAll(false);
     } else {
-      return <Badge variant="destructive">Inactive</Badge>;
+      setSelectedCustomers([...selectedCustomers, customerId]);
     }
   };
 
-  // Helper function to render status badge
+  // Handle contact
+  const handleContactClick = (customerId: number) => {
+    navigate(`/contacts/${customerId}`);
+  };
+
+  // Render helpers
+  const renderActiveBadge = (isActive: number) => {
+    return isActive === 1 ? (
+      <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+        Active
+      </Badge>
+    ) : (
+      <Badge variant="destructive">Inactive</Badge>
+    );
+  };
+
   const renderStatusBadge = (status: string | null | undefined) => {
     if (!status) return "-";
 
@@ -535,25 +595,23 @@ const CustomersPage = () => {
         );
       case "implementation":
         return (
-          <Badge
-            variant="secondary"
-            className="bg-yellow-500 text-white hover:bg-yellow-600"
-          >
+          <Badge variant="secondary" className="bg-yellow-500 text-white">
             {status}
           </Badge>
         );
-      case "not-finished":
+      case "not finished":
         return <Badge variant="destructive">{status}</Badge>;
       default:
         return status;
     }
   };
 
-  // Helper function to render cell content based on column key
   const renderCellContent = (customer: Customer, columnKey: string) => {
     switch (columnKey) {
       case "userid":
-        return customer.userid;
+        return (
+          <span className="font-mono text-sm">{customer.userid}</span>
+        );
       case "company":
         return customer.company || "-";
       case "phonenumber":
@@ -571,9 +629,7 @@ const CustomersPage = () => {
       case "type":
         return customer.type ? (
           <Badge variant="outline">{customer.type}</Badge>
-        ) : (
-          "-"
-        );
+        ) : "-";
       case "note":
         return (
           <div className="max-w-[200px] truncate" title={customer.note || ""}>
@@ -587,73 +643,55 @@ const CustomersPage = () => {
     }
   };
 
-  // Get icon component for a column key
-  const getColumnIcon = (columnKey: string) => {
-    const column = AVAILABLE_COLUMNS.find((col) => col.key === columnKey);
-    return column?.icon || null;
+  // Export functions
+  const fetchAllCustomersForExport = async (): Promise<Customer[]> => {
+    try {
+      const initialResponse = await customersApi.list({ page: 1, limit: 1 });
+      const totalCount = initialResponse.data.total;
+      const response = await customersApi.list({
+        page: 1,
+        limit: totalCount,
+        search: debouncedSearch,
+      });
+      return response.data.data;
+    } catch (error) {
+      console.error("Error fetching all customers:", error);
+      throw error;
+    }
   };
 
-  // Prepare data for export
   const prepareExportData = (customersToExport: Customer[]) => {
     return customersToExport.map((customer) => {
       const row: any = {};
-
-      // Only include visible columns in the export
-      visibleColumns.forEach((key) => {
-        const column = AVAILABLE_COLUMNS.find((col) => col.key === key);
-        if (!column) return;
-
-        let value = customer[key as keyof Customer];
-
-        // Format values based on column type
-        switch (key) {
+      getVisibleColumns().forEach(col => {
+        let value = customer[col.key as keyof Customer];
+        switch (col.key) {
           case "datecreated":
-            row[column.label] = value
-              ? new Date(value as string).toLocaleDateString()
-              : "-";
+            row[col.label] = value ? new Date(value as string).toLocaleDateString() : "-";
             break;
           case "active":
-            row[column.label] = value === 1 ? "Active" : "Inactive";
-            break;
-          case "status":
-          case "type":
-          case "company":
-          case "phonenumber":
-          case "city":
-          case "address":
-          case "note":
-            row[column.label] = value || "-";
+            row[col.label] = value === 1 ? "Active" : "Inactive";
             break;
           default:
-            row[column.label] = value ?? "-";
+            row[col.label] = value ?? "-";
         }
       });
-
       return row;
     });
   };
 
-  // Export to Excel
   const exportToExcel = (dataToExport: Customer[], filename: string) => {
     try {
       const exportData = prepareExportData(dataToExport);
-
-      // Create worksheet
       const ws = XLSX.utils.json_to_sheet(exportData);
-
-      // Create workbook
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Customers");
-
-      // Save file
       XLSX.writeFile(wb, `${filename}.xlsx`);
-
       toast({
         title: "Success",
         description: `Exported ${dataToExport.length} customers to Excel`,
       });
     } catch (error) {
-      console.error("Excel export error:", error);
       toast({
         title: "Error",
         description: "Failed to export to Excel",
@@ -662,52 +700,30 @@ const CustomersPage = () => {
     }
   };
 
-  // Export to PDF
   const exportToPDF = (dataToExport: Customer[], filename: string) => {
     try {
       const doc = new jsPDF();
-
-      // Add title
       doc.setFontSize(18);
       doc.text("Customers List", 14, 22);
-
-      // Add metadata
       doc.setFontSize(10);
       doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 30);
       doc.text(`Total Records: ${dataToExport.length}`, 14, 36);
 
-      // Prepare table columns and data
-      const columns = visibleColumns.map((key) => {
-        const column = AVAILABLE_COLUMNS.find((col) => col.key === key);
-        return column?.label || key;
-      });
-
-      const rows = dataToExport.map((customer) => {
-        return visibleColumns.map((key) => {
-          const value = customer[key as keyof Customer];
-
-          switch (key) {
+      const columns = getVisibleColumns().map(col => col.label);
+      const rows = dataToExport.map(customer => 
+        getVisibleColumns().map(col => {
+          const value = customer[col.key as keyof Customer];
+          switch (col.key) {
             case "datecreated":
-              return value
-                ? new Date(value as string).toLocaleDateString()
-                : "-";
+              return value ? new Date(value as string).toLocaleDateString() : "-";
             case "active":
               return value === 1 ? "Active" : "Inactive";
-            case "status":
-            case "type":
-            case "company":
-            case "phonenumber":
-            case "city":
-            case "address":
-            case "note":
-              return value || "-";
             default:
               return value ?? "-";
           }
-        });
-      });
+        })
+      );
 
-      // Generate table
       autoTable(doc, {
         head: [columns],
         body: rows,
@@ -715,18 +731,14 @@ const CustomersPage = () => {
         styles: { fontSize: 8, cellPadding: 2 },
         headStyles: { fillColor: [41, 128, 185], textColor: 255 },
         alternateRowStyles: { fillColor: [240, 240, 240] },
-        margin: { top: 45 },
       });
 
-      // Save PDF
       doc.save(`${filename}.pdf`);
-
       toast({
         title: "Success",
         description: `Exported ${dataToExport.length} customers to PDF`,
       });
     } catch (error) {
-      console.error("PDF export error:", error);
       toast({
         title: "Error",
         description: "Failed to export to PDF",
@@ -735,11 +747,7 @@ const CustomersPage = () => {
     }
   };
 
-  // Handle export options
-  const handleExport = async (
-    type: "excel" | "pdf",
-    scope: "all" | "selected" | "current",
-  ) => {
+  const handleExport = async (type: "excel" | "pdf", scope: "all" | "selected" | "current") => {
     let dataToExport: Customer[] = [];
     let filename = `customers_${new Date().toISOString().split("T")[0]}`;
 
@@ -754,42 +762,17 @@ const CustomersPage = () => {
             });
             return;
           }
-          dataToExport = customers.filter((c) =>
-            selectedCustomers.includes(c.userid),
-          );
+          dataToExport = customers.filter(c => selectedCustomers.includes(c.userid));
           filename = `selected_customers_${new Date().toISOString().split("T")[0]}`;
-          toast({
-            title: "Exporting",
-            description: `Exporting ${selectedCustomers.length} selected customers...`,
-          });
           break;
-
         case "current":
           dataToExport = customers;
           filename = `page_${page}_customers_${new Date().toISOString().split("T")[0]}`;
-          toast({
-            title: "Exporting",
-            description: `Exporting ${customers.length} customers from current page...`,
-          });
           break;
-
         case "all":
-          toast({
-            title: "Exporting",
-            description: "Fetching all customers for export...",
-          });
-
-          // Show loading state
           setLoading(true);
-
-          // Fetch all customers using the new function
           dataToExport = await fetchAllCustomersForExport();
           filename = `all_customers_${new Date().toISOString().split("T")[0]}`;
-
-          toast({
-            title: "Exporting",
-            description: `Exporting ${dataToExport.length} customers...`,
-          });
           break;
       }
 
@@ -801,7 +784,6 @@ const CustomersPage = () => {
         }
       }
     } catch (error) {
-      console.error("Export error:", error);
       toast({
         title: "Error",
         description: "Failed to fetch customers for export",
@@ -814,33 +796,11 @@ const CustomersPage = () => {
     }
   };
 
-  // Handle file selection for import
+  // Import functions
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Check file type
-    const allowedTypes = [
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
-      "application/vnd.ms-excel", // .xls
-      "text/csv", // .csv
-    ];
-
-    if (
-      !allowedTypes.includes(file.type) &&
-      !file.name.endsWith(".xlsx") &&
-      !file.name.endsWith(".xls") &&
-      !file.name.endsWith(".csv")
-    ) {
-      toast({
-        title: "Invalid file type",
-        description: "Please upload an Excel file (.xlsx, .xls) or CSV file",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Read and parse the file
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
@@ -848,14 +808,11 @@ const CustomersPage = () => {
         const workbook = XLSX.read(data, { type: "array" });
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-
-        // Preview the data
         previewImportData(jsonData);
       } catch (error) {
-        console.error("File parse error:", error);
         toast({
           title: "Error",
-          description: "Failed to parse the file. Please check the format.",
+          description: "Failed to parse the file",
           variant: "destructive",
         });
       }
@@ -863,7 +820,6 @@ const CustomersPage = () => {
     reader.readAsArrayBuffer(file);
   };
 
-  // Preview import data
   const previewImportData = (rows: any[]) => {
     if (rows.length < 2) {
       toast({
@@ -874,94 +830,57 @@ const CustomersPage = () => {
       return;
     }
 
-    // Assume first row is headers
     const headers = rows[0] as string[];
     const dataRows = rows.slice(1);
-
-    // Map headers to expected fields
-    const headerMap: Record<string, keyof Customer> = {
-      Company: "company",
-      company: "company",
-      Phone: "phonenumber",
-      phone: "phonenumber",
-      phonenumber: "phonenumber",
-      City: "city",
-      city: "city",
-      Address: "address",
-      address: "address",
-      Note: "note",
-      note: "note",
-      Status: "status",
-      status: "status",
-      Type: "type",
-      type: "type",
-      Active: "active",
-      active: "active",
-    };
-
     const preview: ImportPreview[] = [];
 
     dataRows.forEach((row, index) => {
       const rowData: Partial<Customer> = {};
       const errors: string[] = [];
 
-      // Map each header to the corresponding field
       headers.forEach((header, colIndex) => {
-        const fieldName = headerMap[header];
+        const fieldMap: Record<string, keyof Customer> = {
+          Company: "company",
+          company: "company",
+          Phone: "phonenumber",
+          phone: "phonenumber",
+          City: "city",
+          city: "city",
+          Address: "address",
+          address: "address",
+          Note: "note",
+          note: "note",
+          Status: "status",
+          status: "status",
+          Type: "type",
+          type: "type",
+          Active: "active",
+          active: "active",
+        };
+
+        const fieldName = fieldMap[header];
         if (fieldName && row[colIndex] !== undefined) {
           let value = row[colIndex];
-
-          // Convert active field to number
           if (fieldName === "active") {
             if (typeof value === "string") {
-              const lowerValue = value.toLowerCase();
-              if (
-                lowerValue === "active" ||
-                lowerValue === "yes" ||
-                lowerValue === "1" ||
-                lowerValue === "true"
-              ) {
-                value = 1;
-              } else {
-                value = 0;
-              }
+              value = ["active", "yes", "1", "true"].includes(value.toLowerCase()) ? 1 : 0;
             } else {
               value = value ? 1 : 0;
             }
           }
-
-          (rowData as Record<keyof Customer, any>)[fieldName] = value;
+          (rowData as any)[fieldName] = value;
         }
       });
 
-      // Validate required fields
-      if (!rowData.company || String(rowData.company).trim() === "") {
+      if (!rowData.company?.toString().trim()) {
         errors.push("Company name is required");
       }
 
-      // Validate status if present
-      if (rowData.status) {
-        const validStatuses = statusOptions.map((opt) => opt.value);
-        if (!validStatuses.includes(rowData.status.toLowerCase())) {
-          errors.push(
-            `Invalid status. Valid values: ${validStatuses.join(", ")}`,
-          );
-        }
-      }
-
-      // Validate type if present
-      if (rowData.type) {
-        const validTypes = typeOptions.map((opt) => opt.value);
-        if (!validTypes.includes(rowData.type.toLowerCase())) {
-          errors.push(`Invalid type. Valid values: ${validTypes.join(", ")}`);
-        }
-      }
-
       preview.push({
-        rowNumber: index + 2, // +2 because row 1 is header
+        rowNumber: index + 2,
         data: rowData,
         errors,
-        isValid: errors.length === 0,
+        isValid: errors.length === 0 && canCreate(),
       });
     });
 
@@ -969,10 +888,17 @@ const CustomersPage = () => {
     setImportDialogOpen(true);
   };
 
-  // Handle import
   const handleImport = async () => {
-    const validRows = importPreview.filter((row) => row.isValid);
+    if (!canCreate()) {
+      toast({
+        title: "Permission Denied",
+        description: "You don't have permission to create customers",
+        variant: "destructive",
+      });
+      return;
+    }
 
+    const validRows = importPreview.filter(row => row.isValid);
     if (validRows.length === 0) {
       toast({
         title: "No valid data",
@@ -992,88 +918,106 @@ const CustomersPage = () => {
 
     for (let i = 0; i < validRows.length; i++) {
       try {
-        const row = validRows[i];
-        await customersApi.create(row.data);
+        await customersApi.create(validRows[i].data);
         successCount++;
       } catch (error) {
-        console.error("Import error:", error);
         errorCount++;
       }
-
       setImportProgress(Math.round(((i + 1) / validRows.length) * 100));
       setImportSuccess(successCount);
       setImportErrors(errorCount);
     }
 
     setImportLoading(false);
-
     toast({
       title: "Import completed",
       description: `Successfully imported ${successCount} customers. ${errorCount} failed.`,
       variant: errorCount > 0 ? "destructive" : "default",
     });
 
-    // Refresh the customer list
     fetchCustomers();
-
-    // Close dialog after a short delay
     setTimeout(() => {
       setImportDialogOpen(false);
       setImportPreview([]);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }, 2000);
   };
 
-  // Download template for import
   const downloadTemplate = () => {
     const template = [
-      [
-        "Company",
-        "Phone",
-        "City",
-        "Address",
-        "Status",
-        "Type",
-        "Active",
-        "Note",
-      ],
-      [
-        "Example Company",
-        "+1234567890",
-        "New York",
-        "123 Main St",
-        "active",
-        "business",
-        "Yes",
-        "Sample note",
-      ],
+      ["Company", "Phone", "City", "Address", "Status", "Type", "Active", "Note"],
+      ["Example Company", "+1234567890", "New York", "123 Main St", "finished", "amc", "Yes", "Sample note"],
     ];
-
     const ws = XLSX.utils.aoa_to_sheet(template);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Template");
     XLSX.writeFile(wb, "customer_import_template.xlsx");
-
     toast({
       title: "Template downloaded",
       description: "Use this template to format your import file",
     });
   };
 
+  const visibleColumnsList = getVisibleColumns();
+
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div>
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="crm-page-header flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Customers</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-semibold tracking-tight">Customers</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             Manage and view all your customer relationships
           </p>
         </div>
         <div className="flex items-center gap-4">
-          {selectedCustomers.length > 0 && (
+          {/* Permission Summary */}
+          <DropdownMenu open={columnHelpOpen} onOpenChange={setColumnHelpOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <HelpCircle className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-80">
+              <DropdownMenuLabel>Your Permissions</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <div className="p-2 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Create Customers:</span>
+                  {canCreate() ? (
+                    <Badge variant="default" className="bg-green-500">Allowed</Badge>
+                  ) : (
+                    <Badge variant="destructive">Not Allowed</Badge>
+                  )}
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Delete Customers:</span>
+                  {canDelete() ? (
+                    <Badge variant="default" className="bg-green-500">Allowed</Badge>
+                  ) : (
+                    <Badge variant="destructive">Not Allowed</Badge>
+                  )}
+                </div>
+                <DropdownMenuSeparator />
+                <div className="text-sm font-medium mb-2">Field Access:</div>
+                {AVAILABLE_COLUMNS.map(col => (
+                  <div key={col.key} className="flex items-center justify-between text-xs">
+                    <span>{col.label}:</span>
+                    <div className="flex gap-2">
+                      <Eye className="h-3 w-3 text-green-500" />
+                      {canUpdateField(col.key) ? (
+                        <Edit className="h-3 w-3 text-green-500" />
+                      ) : (
+                        <Lock className="h-3 w-3 text-red-500" />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {selectedCustomers.length > 0 && canDelete() && (
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">
                 {selectedCustomers.length} selected
@@ -1089,30 +1033,34 @@ const CustomersPage = () => {
             </div>
           )}
 
-          <Button onClick={handleCreateClick}>
-            <PlusCircle className="h-4 w-4 mr-2" />
-            Add Customer
-          </Button>
+          {canCreate() && (
+            <Button onClick={handleCreateClick}>
+              <PlusCircle className="h-4 w-4 mr-2" />
+              Add Customer
+            </Button>
+          )}
 
-          {/* Import Button */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => document.getElementById("file-upload")?.click()}
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            Import
-          </Button>
-          <input
-            id="file-upload"
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            className="hidden"
-            onChange={handleFileSelect}
-            ref={fileInputRef}
-          />
+          {canCreate() && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => document.getElementById("file-upload")?.click()}
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Import
+              </Button>
+              <input
+                id="file-upload"
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={handleFileSelect}
+                ref={fileInputRef}
+              />
+            </>
+          )}
 
-          {/* Export Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
@@ -1123,8 +1071,6 @@ const CustomersPage = () => {
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>Export Options</DropdownMenuLabel>
               <DropdownMenuSeparator />
-
-              {/* Excel Submenu */}
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
                   <FileSpreadsheet className="h-4 w-4 mr-2" />
@@ -1132,27 +1078,21 @@ const CustomersPage = () => {
                 </DropdownMenuSubTrigger>
                 <DropdownMenuPortal>
                   <DropdownMenuSubContent>
-                    <DropdownMenuItem
-                      onClick={() => handleExport("excel", "current")}
-                    >
+                    <DropdownMenuItem onClick={() => handleExport("excel", "current")}>
                       Current Page
                     </DropdownMenuItem>
-                    <DropdownMenuItem
+                    <DropdownMenuItem 
                       onClick={() => handleExport("excel", "selected")}
                       disabled={selectedCustomers.length === 0}
                     >
                       Selected ({selectedCustomers.length})
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => handleExport("excel", "all")}
-                    >
+                    <DropdownMenuItem onClick={() => handleExport("excel", "all")}>
                       All Customers
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuPortal>
               </DropdownMenuSub>
-
-              {/* PDF Submenu */}
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
                   <FileTextIcon className="h-4 w-4 mr-2" />
@@ -1160,20 +1100,16 @@ const CustomersPage = () => {
                 </DropdownMenuSubTrigger>
                 <DropdownMenuPortal>
                   <DropdownMenuSubContent>
-                    <DropdownMenuItem
-                      onClick={() => handleExport("pdf", "current")}
-                    >
+                    <DropdownMenuItem onClick={() => handleExport("pdf", "current")}>
                       Current Page
                     </DropdownMenuItem>
-                    <DropdownMenuItem
+                    <DropdownMenuItem 
                       onClick={() => handleExport("pdf", "selected")}
                       disabled={selectedCustomers.length === 0}
                     >
                       Selected ({selectedCustomers.length})
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => handleExport("pdf", "all")}
-                    >
+                    <DropdownMenuItem onClick={() => handleExport("pdf", "all")}>
                       All Customers
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>
@@ -1181,19 +1117,12 @@ const CustomersPage = () => {
               </DropdownMenuSub>
             </DropdownMenuContent>
           </DropdownMenu>
-
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">
-              {visibleColumns.length} columns visible
-            </span>
-          </div>
         </div>
       </div>
 
-      {/* Search and Filters Card */}
-      <Card className="p-4">
+      {/* Search and Filters */}
+      <Card className="p-4 mb-4">
         <div className="flex flex-col sm:flex-row gap-4">
-          {/* Search Input with Icon */}
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
             <Input
@@ -1204,77 +1133,68 @@ const CustomersPage = () => {
             />
             {search && (
               <button
-                onClick={handleClearSearch}
+                onClick={() => setSearch("")}
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
-                ×
+                <XCircle className="h-4 w-4" />
               </button>
             )}
           </div>
 
-          {/* Column Selector Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Settings2 className="h-4 w-4 mr-2" />
-                Columns
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              className="w-56"
-              onCloseAutoFocus={(e) => e.preventDefault()}
-            >
-              <DropdownMenuLabel>Toggle Columns</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {AVAILABLE_COLUMNS.map((column) => (
-                <DropdownMenuCheckboxItem
-                  key={column.key}
-                  checked={visibleColumns.includes(column.key)}
-                  onCheckedChange={(checked) => {
-                    if (checked) {
-                      setVisibleColumns([...visibleColumns, column.key]);
-                    } else {
-                      // Prevent hiding all columns (keep at least one)
-                      if (visibleColumns.length > 1) {
-                        setVisibleColumns(
-                          visibleColumns.filter((id) => id !== column.key),
-                        );
+          {/* Only show columns dropdown if there are visible columns */}
+          {AVAILABLE_COLUMNS.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Settings2 className="h-4 w-4 mr-2" />
+                  Columns ({visibleColumnsList.length})
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel>Toggle Columns</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {AVAILABLE_COLUMNS.map((column) => (
+                  <DropdownMenuCheckboxItem
+                    key={column.key}
+                    checked={visibleColumns.includes(column.key)}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setVisibleColumns([...visibleColumns, column.key]);
                       } else {
-                        toast({
-                          title: "Cannot hide",
-                          description:
-                            "At least one column must remain visible",
-                          variant: "default",
-                        });
+                        if (visibleColumns.length > 1) {
+                          setVisibleColumns(visibleColumns.filter(id => id !== column.key));
+                        } else {
+                          toast({
+                            title: "Cannot hide",
+                            description: "At least one column must remain visible",
+                          });
+                        }
                       }
-                    }
+                    }}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    <div className="flex items-center gap-2">
+                      <column.icon className="h-4 w-4" />
+                      <span>{column.label}</span>
+                    </div>
+                  </DropdownMenuCheckboxItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => {
+                    const defaultColumns = AVAILABLE_COLUMNS
+                      .filter(col => col.defaultVisible)
+                      .map(col => col.key);
+                    setVisibleColumns(defaultColumns);
                   }}
-                  onSelect={(e) => e.preventDefault()}
+                  className="justify-center text-primary"
                 >
-                  <div className="flex items-center gap-2">
-                    {column.icon && <column.icon className="h-4 w-4" />}
-                    {column.label}
-                  </div>
-                </DropdownMenuCheckboxItem>
-              ))}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => {
-                  const defaultColumns = AVAILABLE_COLUMNS.filter(
-                    (col) => col.defaultVisible,
-                  ).map((col) => col.key);
-                  setVisibleColumns(defaultColumns);
-                }}
-                onSelect={(e) => e.preventDefault()}
-                className="justify-center text-primary cursor-pointer"
-              >
-                Reset to Default
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  Reset to Default
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
 
-          {/* Limit Selector */}
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground whitespace-nowrap">
               Show:
@@ -1283,26 +1203,23 @@ const CustomersPage = () => {
               value={limit.toString()}
               onValueChange={(value) => {
                 setLimit(parseInt(value));
-                setPage(1); // Reset to first page when changing limit
+                setPage(1);
               }}
             >
               <SelectTrigger className="w-24">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {[10, 20, 50, 100, 500].map((l) => (
-                  <SelectItem key={l} value={l.toString()}>
-                    {l}
-                  </SelectItem>
+                {[10, 20, 50, 100, 500].map(l => (
+                  <SelectItem key={l} value={l.toString()}>{l}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
         </div>
 
-        {/* Search Stats */}
         {debouncedSearch && (
-          <div className="mt-2 text-sm text-muted-foreground">
+          <div className="text-sm text-muted-foreground">
             Showing results for "{debouncedSearch}"
             {customers.length === 0 && " - No matches found"}
           </div>
@@ -1317,223 +1234,181 @@ const CustomersPage = () => {
         </div>
       )}
 
-      {/* Table Card */}
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                {/* Selection Checkbox - First column */}
-                <TableHead className="w-12">
-                  <Checkbox
-                    checked={selectAll && customers.length > 0}
-                    onCheckedChange={handleSelectAll}
-                    aria-label="Select all"
-                  />
-                </TableHead>
+      {/* Table - Only show if there are visible columns */}
+      {visibleColumnsList.length > 0 && (
+        <Card className="overflow-hidden mt-2">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  {/* Only show checkbox column if user has delete permission */}
+                  {canDelete() && (
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectAll && customers.length > 0}
+                        onCheckedChange={handleSelectAll}
+                        aria-label="Select all"
+                      />
+                    </TableHead>
+                  )}
 
-                {/* Dynamic Columns from Selector */}
-                {visibleColumns.map((columnKey) => {
-                  const column = AVAILABLE_COLUMNS.find(
-                    (col) => col.key === columnKey,
-                  );
-                  return (
-                    <TableHead
-                      key={columnKey}
-                      className={
-                        columnKey === "datecreated"
-                          ? "whitespace-nowrap min-w-[120px]"
-                          : "min-w-[100px]"
-                      }
-                    >
+                  {visibleColumnsList.map((column) => (
+                    <TableHead key={column.key} className="whitespace-nowrap">
                       <div className="flex items-center gap-1">
-                        {column?.icon && (
-                          <column.icon className="h-4 w-4 shrink-0" />
-                        )}
-                        <span
-                          className={
-                            columnKey === "datecreated"
-                              ? "whitespace-nowrap"
-                              : ""
-                          }
-                        >
-                          {column?.label || columnKey}
-                        </span>
+                        <column.icon className="h-4 w-4 shrink-0" />
+                        <span>{column.label}</span>
                       </div>
                     </TableHead>
-                  );
-                })}
+                  ))}
 
-                {/* Mandatory Columns at the end */}
-                <TableHead className="w-24 whitespace-nowrap">
-                  <div className="flex items-center gap-1">
-                    <MoreHorizontal className="h-4 w-4" />
-                    Actions
-                  </div>
-                </TableHead>
-                <TableHead className="w-24 whitespace-nowrap">
-                  <div className="flex items-center gap-1">
-                    <Mail className="h-4 w-4" />
-                    Contact
-                  </div>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={visibleColumns.length + 3} // +3 for checkbox and 2 mandatory columns
-                    className="h-32 text-center"
-                  >
-                    <div className="flex items-center justify-center gap-2">
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                      <span className="text-muted-foreground">
-                        Loading customers...
-                      </span>
-                    </div>
-                  </TableCell>
+                  <TableHead className="w-24">Actions</TableHead>
+                  <TableHead className="w-24">Contact</TableHead>
                 </TableRow>
-              ) : customers.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={visibleColumns.length + 3}
-                    className="h-32 text-center text-muted-foreground"
-                  >
-                    No customers found
-                  </TableCell>
-                </TableRow>
-              ) : (
-                customers.map((customer) => (
-                  <TableRow key={customer.userid} className="hover:bg-muted/50">
-                    {/* Selection Checkbox - First column */}
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedCustomers.includes(customer.userid)}
-                        onCheckedChange={() =>
-                          handleSelectCustomer(customer.userid)
-                        }
-                        aria-label={`Select customer ${customer.userid}`}
-                      />
-                    </TableCell>
-
-                    {/* Dynamic Columns */}
-                    {visibleColumns.map((columnKey) => {
-                      const Icon = getColumnIcon(columnKey);
-                      return (
-                        <TableCell key={`${customer.userid}-${columnKey}`}>
-                          <div className="flex items-center gap-2">
-                            {renderCellContent(customer, columnKey)}
-                          </div>
-                        </TableCell>
-                      );
-                    })}
-
-                    {/* Actions Column - At the end */}
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => handleEditClick(customer)}
-                          >
-                            <Edit className="h-4 w-4 mr-2" />
-                            Edit Customer
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleDeleteClick(customer.userid)}
-                            className="text-red-600"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-
-                    {/* Contact Column - At the end */}
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleContactClick(customer.userid)}
-                      >
-                        <Mail className="h-4 w-4 mr-2" />
-                        Contact
-                      </Button>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell 
+                      colSpan={visibleColumnsList.length + (canDelete() ? 3 : 2)} 
+                      className="h-32 text-center"
+                    >
+                      <div className="flex items-center justify-center gap-2">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        <span className="text-muted-foreground">Loading customers...</span>
+                      </div>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </Card>
+                ) : customers.length === 0 ? (
+                  <TableRow>
+                    <TableCell 
+                      colSpan={visibleColumnsList.length + (canDelete() ? 3 : 2)} 
+                      className="h-32 text-center text-muted-foreground"
+                    >
+                      No customers found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  customers.map((customer) => (
+                    <TableRow key={customer.userid} className="hover:bg-muted/50">
+                      {/* Only show checkbox column if user has delete permission */}
+                      {canDelete() && (
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedCustomers.includes(customer.userid)}
+                            onCheckedChange={() => handleSelectCustomer(customer.userid)}
+                          />
+                        </TableCell>
+                      )}
 
-      {/* Pagination */}
+                      {visibleColumnsList.map((column) => (
+                        <TableCell key={`${customer.userid}-${column.key}`}>
+                          {renderCellContent(customer, column.key)}
+                        </TableCell>
+                      ))}
+
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleViewClick(customer)}
+                            title="View Details"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          {/* Only show edit button if user has update permission for at least one field */}
+                          {updateableFields.length > 0 && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEditClick(customer)}
+                              title="Edit"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {/* Only show delete button if user has delete permission */}
+                          {canDelete() && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteClick(customer.userid)}
+                              className="text-red-600 hover:text-red-700"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleContactClick(customer.userid)}
+                        >
+                          <Mail className="h-4 w-4 mr-2" />
+                          Contact
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
+      )}
+
+      {/* Show message if no columns are visible */}
+      {visibleColumnsList.length === 0 && !loading && (
+        <Card className="p-8 text-center text-muted-foreground">
+          <EyeOff className="h-12 w-12 mx-auto mb-4 opacity-50" />
+          <h3 className="text-lg font-semibold mb-2">No Columns Visible</h3>
+          <p>You don't have permission to view any customer fields.</p>
+        </Card>
+      )}
+
+      {/* Pagination - Only show if there are customers */}
       {!loading && customers.length > 0 && (
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mt-2">
           <div className="text-sm text-muted-foreground">
             Page {page} of {totalPages}
           </div>
-
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="icon"
-              onClick={handleFirstPage}
+              onClick={() => {
+                isPaginationRef.current = true;
+                setPage(1);
+              }}
               disabled={page === 1}
-              className="hidden sm:inline-flex"
             >
               <ChevronsLeft className="h-4 w-4" />
             </Button>
             <Button
               variant="outline"
               size="icon"
-              onClick={handlePrevPage}
+              onClick={() => {
+                isPaginationRef.current = true;
+                setPage(p => Math.max(1, p - 1));
+              }}
               disabled={page === 1}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-
-            {/* Page Numbers */}
-            <div className="flex items-center gap-1 px-2">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum = page;
-                if (totalPages <= 5) {
-                  pageNum = i + 1;
-                } else if (page <= 3) {
-                  pageNum = i + 1;
-                } else if (page >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
-                } else {
-                  pageNum = page - 2 + i;
-                }
-
-                return (
-                  <Button
-                    key={i}
-                    variant={pageNum === page ? "default" : "outline"}
-                    size="icon"
-                    className="h-8 w-8 hidden sm:inline-flex"
-                    onClick={() => setPage(pageNum)}
-                  >
-                    {pageNum}
-                  </Button>
-                );
-              })}
-            </div>
-
+            <span className="px-4 py-2 text-sm">
+              {page}
+            </span>
             <Button
               variant="outline"
               size="icon"
-              onClick={handleNextPage}
+              onClick={() => {
+                isPaginationRef.current = true;
+                setPage(p => Math.min(totalPages, p + 1));
+              }}
               disabled={page === totalPages}
             >
               <ChevronRight className="h-4 w-4" />
@@ -1541,9 +1416,11 @@ const CustomersPage = () => {
             <Button
               variant="outline"
               size="icon"
-              onClick={handleLastPage}
+              onClick={() => {
+                isPaginationRef.current = true;
+                setPage(totalPages);
+              }}
               disabled={page === totalPages}
-              className="hidden sm:inline-flex"
             >
               <ChevronsRight className="h-4 w-4" />
             </Button>
@@ -1551,21 +1428,581 @@ const CustomersPage = () => {
         </div>
       )}
 
+      {/* View Details Dialog */}
+      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">Customer Details</DialogTitle>
+            <DialogDescription>
+              View detailed customer information
+            </DialogDescription>
+          </DialogHeader>
+
+          {viewingCustomer && (
+            <div className="space-y-6 py-4">
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold border-b pb-2">Basic Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {canViewField("userid") && (
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Customer ID</Label>
+                      <p className="font-mono">{viewingCustomer.userid}</p>
+                    </div>
+                  )}
+                  {canViewField("company") && (
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Company Name</Label>
+                      <p>{viewingCustomer.company || "-"}</p>
+                    </div>
+                  )}
+                  {canViewField("type") && (
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Type</Label>
+                      <p>{viewingCustomer.type || "-"}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Contact Information */}
+              {canViewField("phonenumber") && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold border-b pb-2">Contact Information</h3>
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Phone Number</Label>
+                    <p>{viewingCustomer.phonenumber || "-"}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Location Information */}
+              {(canViewField("city") || canViewField("address")) && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold border-b pb-2">Location Information</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    {canViewField("city") && (
+                      <div>
+                        <Label className="text-sm text-muted-foreground">City</Label>
+                        <p>{viewingCustomer.city || "-"}</p>
+                      </div>
+                    )}
+                    {canViewField("address") && (
+                      <div>
+                        <Label className="text-sm text-muted-foreground">Address</Label>
+                        <p>{viewingCustomer.address || "-"}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Status Information */}
+              {(canViewField("status") || canViewField("active")) && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold border-b pb-2">Status Information</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    {canViewField("status") && (
+                      <div>
+                        <Label className="text-sm text-muted-foreground">Status</Label>
+                        <div className="mt-1">{renderStatusBadge(viewingCustomer.status)}</div>
+                      </div>
+                    )}
+                    {canViewField("active") && (
+                      <div>
+                        <Label className="text-sm text-muted-foreground">Active Status</Label>
+                        <div className="mt-1">{renderActiveBadge(viewingCustomer.active)}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Additional Information */}
+              {canViewField("note") && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold border-b pb-2">Additional Information</h3>
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Notes</Label>
+                    <p className="whitespace-pre-wrap">{viewingCustomer.note || "-"}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* System Information */}
+              {canViewField("datecreated") && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold border-b pb-2">System Information</h3>
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Date Created</Label>
+                    <p>{new Date(viewingCustomer.datecreated).toLocaleString()}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button onClick={() => setViewDialogOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">Edit Customer</DialogTitle>
+            <DialogDescription>
+              Update customer information. Fields you don't have permission to edit will be disabled.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editingCustomer && (
+            <div className="space-y-6 py-4">
+              {/* Read-only ID */}
+              {canViewField("userid") && (
+                <div className="space-y-2 p-4 bg-muted/30 rounded-lg">
+                  <Label className="text-sm font-medium text-muted-foreground">
+                    Customer ID
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Hash className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-mono">{editingCustomer.userid}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Company Information */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold border-b pb-2">Company Information</h3>
+                
+                {canViewField("company") && (
+                  <div className="space-y-2">
+                    <Label htmlFor="company" className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4" />
+                      Company Name
+                      {!canUpdateField("company") && (
+                        <Lock className="h-3 w-3 text-muted-foreground" />
+                      )}
+                    </Label>
+                    <Input
+                      id="company"
+                      name="company"
+                      value={editFormData.company || ""}
+                      onChange={handleFormChange}
+                      placeholder="Enter company name"
+                      disabled={!canUpdateField("company")}
+                    />
+                  </div>
+                )}
+
+                {canViewField("type") && (
+                  <div className="space-y-2">
+                    <Label htmlFor="type" className="flex items-center gap-2">
+                      <Tag className="h-4 w-4" />
+                      Customer Type
+                      {!canUpdateField("type") && (
+                        <Lock className="h-3 w-3 text-muted-foreground" />
+                      )}
+                    </Label>
+                    <Select
+                      value={editFormData.type || "none"}
+                      onValueChange={(value) => handleSelectChange("type", value)}
+                      disabled={!canUpdateField("type")}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select customer type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        {typeOptions.map(option => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              {/* Contact Information */}
+              {canViewField("phonenumber") && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold border-b pb-2">Contact Information</h3>
+                  <div className="space-y-2">
+                    <Label htmlFor="phonenumber" className="flex items-center gap-2">
+                      <Phone className="h-4 w-4" />
+                      Phone Number
+                      {!canUpdateField("phonenumber") && (
+                        <Lock className="h-3 w-3 text-muted-foreground" />
+                      )}
+                    </Label>
+                    <Input
+                      id="phonenumber"
+                      name="phonenumber"
+                      value={editFormData.phonenumber || ""}
+                      onChange={handleFormChange}
+                      placeholder="Enter phone number"
+                      disabled={!canUpdateField("phonenumber")}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Location Information */}
+              {(canViewField("city") || canViewField("address")) && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold border-b pb-2">Location Information</h3>
+                  
+                  {canViewField("city") && (
+                    <div className="space-y-2">
+                      <Label htmlFor="city" className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4" />
+                        City
+                        {!canUpdateField("city") && (
+                          <Lock className="h-3 w-3 text-muted-foreground" />
+                        )}
+                      </Label>
+                      <Input
+                        id="city"
+                        name="city"
+                        value={editFormData.city || ""}
+                        onChange={handleFormChange}
+                        placeholder="Enter city"
+                        disabled={!canUpdateField("city")}
+                      />
+                    </div>
+                  )}
+
+                  {canViewField("address") && (
+                    <div className="space-y-2">
+                      <Label htmlFor="address" className="flex items-center gap-2">
+                        <MapPinned className="h-4 w-4" />
+                        Address
+                        {!canUpdateField("address") && (
+                          <Lock className="h-3 w-3 text-muted-foreground" />
+                        )}
+                      </Label>
+                      <Input
+                        id="address"
+                        name="address"
+                        value={editFormData.address || ""}
+                        onChange={handleFormChange}
+                        placeholder="Enter address"
+                        disabled={!canUpdateField("address")}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Status Information */}
+              {(canViewField("status") || canViewField("active")) && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold border-b pb-2">Status Information</h3>
+                  
+                  {canViewField("status") && (
+                    <div className="space-y-2">
+                      <Label htmlFor="status" className="flex items-center gap-2">
+                        <Clock className="h-4 w-4" />
+                        Status
+                        {!canUpdateField("status") && (
+                          <Lock className="h-3 w-3 text-muted-foreground" />
+                        )}
+                      </Label>
+                      <Select
+                        value={editFormData.status || "none"}
+                        onValueChange={(value) => handleSelectChange("status", value)}
+                        disabled={!canUpdateField("status")}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          {statusOptions.map(option => (
+                            <SelectItem key={option.value} value={option.value}>
+                              <div className="flex items-center gap-2">
+                                <div className={`w-2 h-2 rounded-full ${option.color}`} />
+                                {option.label}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {canViewField("active") && (
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="active"
+                        checked={editFormData.active === 1}
+                        onCheckedChange={handleActiveChange}
+                        disabled={!canUpdateField("active")}
+                      />
+                      <Label htmlFor="active" className="flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4" />
+                        Active Customer
+                        {!canUpdateField("active") && (
+                          <Lock className="h-3 w-3 text-muted-foreground" />
+                        )}
+                      </Label>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Notes */}
+              {canViewField("note") && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold border-b pb-2">Additional Information</h3>
+                  <div className="space-y-2">
+                    <Label htmlFor="note" className="flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      Notes
+                      {!canUpdateField("note") && (
+                        <Lock className="h-3 w-3 text-muted-foreground" />
+                      )}
+                    </Label>
+                    <Textarea
+                      id="note"
+                      name="note"
+                      value={editFormData.note || ""}
+                      onChange={handleFormChange}
+                      placeholder="Enter any additional notes..."
+                      rows={4}
+                      disabled={!canUpdateField("note")}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button 
+              onClick={handleSaveEdit} 
+              disabled={updateableFields.length === 0}
+            >
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Dialog */}
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">Create New Customer</DialogTitle>
+            <DialogDescription>
+              Add a new customer to your database. Fill in the information below.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            {/* Company Information */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold border-b pb-2">Company Information</h3>
+              
+              {canViewField("company") && (
+                <div className="space-y-2">
+                  <Label htmlFor="create-company" className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Company Name <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="create-company"
+                    name="company"
+                    value={createFormData.company}
+                    onChange={(e) => setCreateFormData(prev => ({ ...prev, company: e.target.value }))}
+                    placeholder="Enter company name"
+                  />
+                </div>
+              )}
+
+              {canViewField("type") && (
+                <div className="space-y-2">
+                  <Label htmlFor="create-type" className="flex items-center gap-2">
+                    <Tag className="h-4 w-4" />
+                    Customer Type
+                  </Label>
+                  <Select
+                    value={createFormData.type || "none"}
+                    onValueChange={(value) => setCreateFormData(prev => ({ 
+                      ...prev, 
+                      type: value === "none" ? "" : value 
+                    }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select customer type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {typeOptions.map(option => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            {/* Contact Information */}
+            {canViewField("phonenumber") && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold border-b pb-2">Contact Information</h3>
+                <div className="space-y-2">
+                  <Label htmlFor="create-phonenumber" className="flex items-center gap-2">
+                    <Phone className="h-4 w-4" />
+                    Phone Number
+                  </Label>
+                  <Input
+                    id="create-phonenumber"
+                    name="phonenumber"
+                    value={createFormData.phonenumber}
+                    onChange={(e) => setCreateFormData(prev => ({ ...prev, phonenumber: e.target.value }))}
+                    placeholder="Enter phone number"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Location Information */}
+            {(canViewField("city") || canViewField("address")) && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold border-b pb-2">Location Information</h3>
+                
+                {canViewField("city") && (
+                  <div className="space-y-2">
+                    <Label htmlFor="create-city" className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4" />
+                      City
+                    </Label>
+                    <Input
+                      id="create-city"
+                      name="city"
+                      value={createFormData.city}
+                      onChange={(e) => setCreateFormData(prev => ({ ...prev, city: e.target.value }))}
+                      placeholder="Enter city"
+                    />
+                  </div>
+                )}
+
+                {canViewField("address") && (
+                  <div className="space-y-2">
+                    <Label htmlFor="create-address" className="flex items-center gap-2">
+                      <MapPinned className="h-4 w-4" />
+                      Address
+                    </Label>
+                    <Input
+                      id="create-address"
+                      name="address"
+                      value={createFormData.address}
+                      onChange={(e) => setCreateFormData(prev => ({ ...prev, address: e.target.value }))}
+                      placeholder="Enter address"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Status Information */}
+            {(canViewField("status") || canViewField("active")) && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold border-b pb-2">Status Information</h3>
+                
+                {canViewField("status") && (
+                  <div className="space-y-2">
+                    <Label htmlFor="create-status" className="flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      Status
+                    </Label>
+                    <Select
+                      value={createFormData.status || "none"}
+                      onValueChange={(value) => setCreateFormData(prev => ({ 
+                        ...prev, 
+                        status: value === "none" ? "" : value 
+                      }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        {statusOptions.map(option => (
+                          <SelectItem key={option.value} value={option.value}>
+                            <div className="flex items-center gap-2">
+                              <div className={`w-2 h-2 rounded-full ${option.color}`} />
+                              {option.label}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {canViewField("active") && (
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="create-active"
+                      checked={createFormData.active === 1}
+                      onCheckedChange={(checked) => setCreateFormData(prev => ({ 
+                        ...prev, 
+                        active: checked ? 1 : 0 
+                      }))}
+                    />
+                    <Label htmlFor="create-active" className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4" />
+                      Active Customer
+                    </Label>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Notes */}
+            {canViewField("note") && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold border-b pb-2">Additional Information</h3>
+                <div className="space-y-2">
+                  <Label htmlFor="create-note" className="flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Notes
+                  </Label>
+                  <Textarea
+                    id="create-note"
+                    name="note"
+                    value={createFormData.note}
+                    onChange={(e) => setCreateFormData(prev => ({ ...prev, note: e.target.value }))}
+                    placeholder="Enter any additional notes..."
+                    rows={4}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button onClick={handleSaveCreate}>Create Customer</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Import Preview Dialog */}
-      <Dialog
-        open={importDialogOpen}
-        onOpenChange={(open) => {
-          setImportDialogOpen(open);
-          if (!open) {
-            // Clear the file input when dialog closes
-            if (fileInputRef.current) {
-              fileInputRef.current.value = "";
-            }
-            // Optional: Clear preview data
-            setImportPreview([]);
-          }
-        }}
-      >
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl">Import Customers</DialogTitle>
@@ -1575,19 +2012,13 @@ const CustomersPage = () => {
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Download Template Link */}
             <div className="flex justify-end">
-              <Button
-                variant="link"
-                onClick={downloadTemplate}
-                className="text-primary"
-              >
+              <Button variant="link" onClick={downloadTemplate} className="text-primary">
                 <Download className="h-4 w-4 mr-2" />
                 Download Import Template
               </Button>
             </div>
 
-            {/* Import Progress */}
             {importLoading && (
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
@@ -1596,28 +2027,25 @@ const CustomersPage = () => {
                 </div>
                 <Progress value={importProgress} className="w-full" />
                 <div className="flex gap-4 text-sm">
-                  <span className="text-green-600">
-                    Success: {importSuccess}
-                  </span>
+                  <span className="text-green-600">Success: {importSuccess}</span>
                   <span className="text-red-600">Errors: {importErrors}</span>
                 </div>
               </div>
             )}
 
-            {/* Preview Table */}
             {!importLoading && (
               <>
                 <div className="flex items-center gap-4 p-4 bg-muted/30 rounded-lg">
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="h-5 w-5 text-green-500" />
                     <span className="text-sm">
-                      Valid: {importPreview.filter((r) => r.isValid).length}
+                      Valid: {importPreview.filter(r => r.isValid).length}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <XCircle className="h-5 w-5 text-red-500" />
                     <span className="text-sm">
-                      Invalid: {importPreview.filter((r) => !r.isValid).length}
+                      Invalid: {importPreview.filter(r => !r.isValid).length}
                     </span>
                   </div>
                 </div>
@@ -1639,24 +2067,15 @@ const CustomersPage = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {importPreview.map((row) => (
-                        <TableRow
-                          key={row.rowNumber}
-                          className={!row.isValid ? "bg-red-50" : ""}
-                        >
-                          <TableCell className="font-mono">
-                            {row.rowNumber}
-                          </TableCell>
+                      {importPreview.map(row => (
+                        <TableRow key={row.rowNumber} className={!row.isValid ? "bg-red-50" : ""}>
+                          <TableCell className="font-mono">{row.rowNumber}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               {!row.data.company && (
                                 <AlertCircle className="h-4 w-4 text-red-500" />
                               )}
-                              <span
-                                className={
-                                  !row.data.company ? "text-red-600" : ""
-                                }
-                              >
+                              <span className={!row.data.company ? "text-red-600" : ""}>
                                 {row.data.company || "-"}
                               </span>
                             </div>
@@ -1667,29 +2086,20 @@ const CustomersPage = () => {
                           <TableCell>
                             {row.data.status ? (
                               <Badge variant="outline">{row.data.status}</Badge>
-                            ) : (
-                              "-"
-                            )}
+                            ) : "-"}
                           </TableCell>
                           <TableCell>
                             {row.data.type ? (
                               <Badge variant="outline">{row.data.type}</Badge>
-                            ) : (
-                              "-"
-                            )}
+                            ) : "-"}
                           </TableCell>
                           <TableCell>
                             {row.data.active !== undefined
-                              ? row.data.active === 1
-                                ? "Active"
-                                : "Inactive"
+                              ? row.data.active === 1 ? "Active" : "Inactive"
                               : "-"}
                           </TableCell>
                           <TableCell>
-                            <div
-                              className="max-w-[150px] truncate"
-                              title={row.data.note}
-                            >
+                            <div className="max-w-[150px] truncate" title={row.data.note}>
                               {row.data.note || "-"}
                             </div>
                           </TableCell>
@@ -1697,9 +2107,7 @@ const CustomersPage = () => {
                             {row.errors.length > 0 ? (
                               <div className="flex items-center gap-1">
                                 <XCircle className="h-4 w-4 text-red-500" />
-                                <span className="text-xs text-red-600">
-                                  {row.errors[0]}
-                                </span>
+                                <span className="text-xs text-red-600">{row.errors[0]}</span>
                               </div>
                             ) : (
                               <CheckCircle2 className="h-4 w-4 text-green-500" />
@@ -1722,10 +2130,7 @@ const CustomersPage = () => {
             </DialogClose>
             <Button
               onClick={handleImport}
-              disabled={
-                importLoading ||
-                importPreview.filter((r) => r.isValid).length === 0
-              }
+              disabled={importLoading || importPreview.filter(r => r.isValid).length === 0}
             >
               {importLoading ? (
                 <>
@@ -1735,482 +2140,9 @@ const CustomersPage = () => {
               ) : (
                 <>
                   <Upload className="h-4 w-4 mr-2" />
-                  Import {importPreview.filter((r) => r.isValid).length} Valid
-                  Rows
+                  Import {importPreview.filter(r => r.isValid).length} Valid Rows
                 </>
               )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Dialog - Comprehensive Form */}
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-2xl">Edit Customer</DialogTitle>
-            <DialogDescription>
-              Update customer information. All fields except ID can be modified.
-            </DialogDescription>
-          </DialogHeader>
-
-          {editingCustomer && (
-            <div className="space-y-6 py-4">
-              {/* Customer ID (Read-only) */}
-              <div className="space-y-2 p-4 bg-muted/30 rounded-lg">
-                <Label className="text-sm font-medium text-muted-foreground">
-                  Customer ID
-                </Label>
-                <div className="flex items-center gap-2">
-                  <Hash className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-mono">{editingCustomer.userid}</span>
-                </div>
-              </div>
-
-              {/* Company Information */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold border-b pb-2">
-                  Company Information
-                </h3>
-
-                <div className="space-y-2">
-                  <Label htmlFor="company" className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
-                    Company Name
-                  </Label>
-                  <Input
-                    id="company"
-                    name="company"
-                    value={editFormData.company}
-                    onChange={handleFormChange}
-                    placeholder="Enter company name"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="type" className="flex items-center gap-2">
-                    <Tag className="h-4 w-4" />
-                    Customer Type
-                  </Label>
-                  <Select
-                    value={editFormData.type || "none"}
-                    onValueChange={(value) =>
-                      handleSelectChange("type", value === "none" ? "" : value)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select customer type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {typeOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Contact Information */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold border-b pb-2">
-                  Contact Information
-                </h3>
-
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="phonenumber"
-                    className="flex items-center gap-2"
-                  >
-                    <Phone className="h-4 w-4" />
-                    Phone Number
-                  </Label>
-                  <Input
-                    id="phonenumber"
-                    name="phonenumber"
-                    value={editFormData.phonenumber}
-                    onChange={handleFormChange}
-                    placeholder="Enter phone number"
-                  />
-                </div>
-              </div>
-
-              {/* Location Information */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold border-b pb-2">
-                  Location Information
-                </h3>
-
-                <div className="space-y-2">
-                  <Label htmlFor="city" className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4" />
-                    City
-                  </Label>
-                  <Input
-                    id="city"
-                    name="city"
-                    value={editFormData.city}
-                    onChange={handleFormChange}
-                    placeholder="Enter city"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="address" className="flex items-center gap-2">
-                    <MapPinned className="h-4 w-4" />
-                    Address
-                  </Label>
-                  <Input
-                    id="address"
-                    name="address"
-                    value={editFormData.address}
-                    onChange={handleFormChange}
-                    placeholder="Enter address"
-                  />
-                </div>
-              </div>
-
-              {/* Status Information */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold border-b pb-2">
-                  Status Information
-                </h3>
-
-                <div className="space-y-2">
-                  <Label htmlFor="status" className="flex items-center gap-2">
-                    <Clock className="h-4 w-4" />
-                    Status
-                  </Label>
-                  <Select
-                    value={editFormData.status || "none"}
-                    onValueChange={(value) =>
-                      handleSelectChange(
-                        "status",
-                        value === "none" ? "" : value,
-                      )
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {statusOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          <div className="flex items-center gap-2">
-                            <div
-                              className={`w-2 h-2 rounded-full ${option.color}`}
-                            />
-                            {option.label}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="active"
-                    checked={editFormData.active === 1}
-                    onCheckedChange={handleActiveChange}
-                  />
-                  <Label htmlFor="active" className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4" />
-                    Active Customer
-                  </Label>
-                </div>
-              </div>
-
-              {/* Notes */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold border-b pb-2">
-                  Additional Information
-                </h3>
-
-                <div className="space-y-2">
-                  <Label htmlFor="note" className="flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    Notes
-                  </Label>
-                  <Textarea
-                    id="note"
-                    name="note"
-                    value={editFormData.note}
-                    onChange={handleFormChange}
-                    placeholder="Enter any additional notes..."
-                    rows={4}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
-            </DialogClose>
-            <Button onClick={handleSaveEdit} className="min-w-[100px]">
-              Save Changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Create Customer Dialog */}
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-2xl">Create New Customer</DialogTitle>
-            <DialogDescription>
-              Add a new customer to your database. Fill in the information
-              below.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-6 py-4">
-            {/* Company Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold border-b pb-2">
-                Company Information
-              </h3>
-
-              <div className="space-y-2">
-                <Label
-                  htmlFor="create-company"
-                  className="flex items-center gap-2"
-                >
-                  <Building2 className="h-4 w-4" />
-                  Company Name <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="create-company"
-                  name="company"
-                  value={createFormData.company}
-                  onChange={(e) =>
-                    setCreateFormData((prev) => ({
-                      ...prev,
-                      company: e.target.value,
-                    }))
-                  }
-                  placeholder="Enter company name"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label
-                  htmlFor="create-type"
-                  className="flex items-center gap-2"
-                >
-                  <Tag className="h-4 w-4" />
-                  Customer Type
-                </Label>
-                <Select
-                  value={createFormData.type || "none"}
-                  onValueChange={(value) =>
-                    setCreateFormData((prev) => ({
-                      ...prev,
-                      type: value === "none" ? "" : value,
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select customer type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {typeOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Contact Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold border-b pb-2">
-                Contact Information
-              </h3>
-
-              <div className="space-y-2">
-                <Label
-                  htmlFor="create-phonenumber"
-                  className="flex items-center gap-2"
-                >
-                  <Phone className="h-4 w-4" />
-                  Phone Number
-                </Label>
-                <Input
-                  id="create-phonenumber"
-                  name="phonenumber"
-                  value={createFormData.phonenumber}
-                  onChange={(e) =>
-                    setCreateFormData((prev) => ({
-                      ...prev,
-                      phonenumber: e.target.value,
-                    }))
-                  }
-                  placeholder="Enter phone number"
-                />
-              </div>
-            </div>
-
-            {/* Location Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold border-b pb-2">
-                Location Information
-              </h3>
-
-              <div className="space-y-2">
-                <Label
-                  htmlFor="create-city"
-                  className="flex items-center gap-2"
-                >
-                  <MapPin className="h-4 w-4" />
-                  City
-                </Label>
-                <Input
-                  id="create-city"
-                  name="city"
-                  value={createFormData.city}
-                  onChange={(e) =>
-                    setCreateFormData((prev) => ({
-                      ...prev,
-                      city: e.target.value,
-                    }))
-                  }
-                  placeholder="Enter city"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label
-                  htmlFor="create-address"
-                  className="flex items-center gap-2"
-                >
-                  <MapPinned className="h-4 w-4" />
-                  Address
-                </Label>
-                <Input
-                  id="create-address"
-                  name="address"
-                  value={createFormData.address}
-                  onChange={(e) =>
-                    setCreateFormData((prev) => ({
-                      ...prev,
-                      address: e.target.value,
-                    }))
-                  }
-                  placeholder="Enter address"
-                />
-              </div>
-            </div>
-
-            {/* Status Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold border-b pb-2">
-                Status Information
-              </h3>
-
-              <div className="space-y-2">
-                <Label
-                  htmlFor="create-status"
-                  className="flex items-center gap-2"
-                >
-                  <Clock className="h-4 w-4" />
-                  Status
-                </Label>
-                <Select
-                  value={createFormData.status || "none"}
-                  onValueChange={(value) =>
-                    setCreateFormData((prev) => ({
-                      ...prev,
-                      status: value === "none" ? "" : value,
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {statusOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        <div className="flex items-center gap-2">
-                          <div
-                            className={`w-2 h-2 rounded-full ${option.color}`}
-                          />
-                          {option.label}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="create-active"
-                  checked={createFormData.active === 1}
-                  onCheckedChange={(checked) =>
-                    setCreateFormData((prev) => ({
-                      ...prev,
-                      active: checked ? 1 : 0,
-                    }))
-                  }
-                />
-                <Label
-                  htmlFor="create-active"
-                  className="flex items-center gap-2"
-                >
-                  <CheckCircle className="h-4 w-4" />
-                  Active Customer
-                </Label>
-              </div>
-            </div>
-
-            {/* Notes */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold border-b pb-2">
-                Additional Information
-              </h3>
-
-              <div className="space-y-2">
-                <Label
-                  htmlFor="create-note"
-                  className="flex items-center gap-2"
-                >
-                  <FileText className="h-4 w-4" />
-                  Notes
-                </Label>
-                <Textarea
-                  id="create-note"
-                  name="note"
-                  value={createFormData.note}
-                  onChange={(e) =>
-                    setCreateFormData((prev) => ({
-                      ...prev,
-                      note: e.target.value,
-                    }))
-                  }
-                  placeholder="Enter any additional notes..."
-                  rows={4}
-                />
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
-            </DialogClose>
-            <Button onClick={handleSaveCreate} className="min-w-[100px]">
-              Create Customer
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2239,10 +2171,7 @@ const CustomersPage = () => {
       </AlertDialog>
 
       {/* Bulk Delete Confirmation Dialog */}
-      <AlertDialog
-        open={bulkDeleteDialogOpen}
-        onOpenChange={setBulkDeleteDialogOpen}
-      >
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>

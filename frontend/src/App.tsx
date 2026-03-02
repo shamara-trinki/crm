@@ -14,6 +14,10 @@ import NotFound from "./pages/NotFound";
 import CustomersPage from "@/pages/customers/index";
 import JobSchedule from "@/pages/JobSchedule";
 import JobScheduleList from "@/pages/JobScheduleList";
+import CustomersPage from "@/pages/Customers";
+import ContactsPage from "@/pages/Contact";
+import ServiceTypesPage from "@/pages/ServiceTypes";
+import PaymentTransaction from './pages/PaymentTransaction';
 
 const queryClient = new QueryClient();
 
@@ -40,7 +44,11 @@ const App = () => (
        {/* <Route path="/job-schedule" element={<JobSchedule />} /> */}
           <Route path="/job-schedule" element={<JobScheduleList />} />
           <Route path="/job-schedule/new" element={<JobSchedule />} />
+              <Route path="/contacts/:userid" element={<ContactsPage />} />
+              <Route path="/service-types" element={<ServiceTypesPage />} />
+               <Route path="/payment" element={<PaymentTransaction />} />
             </Route>
+           
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
