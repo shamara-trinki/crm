@@ -51,7 +51,7 @@ export async function updateUser(req, res) {
 export async function listUsers(req, res) {
   const [rows] = await db.query(
     `SELECT u.id, u.username, u.role_id AS roleId, r.name AS role, u.is_active, u.created_at
-     FROM users u JOIN roles r ON r.id=u.role_id
+     FROM users u LEFT JOIN roles r ON r.id=u.role_id
      ORDER BY u.id DESC`
   );
   return res.json(rows);

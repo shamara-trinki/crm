@@ -23,10 +23,10 @@ export const CustomersHeader: React.FC<CustomersHeaderProps> = ({
 }) => {
   return (
     
-    <div className="flex items-center justify-between">
+    <div className="crm-page-header flex items-center justify-between">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Customers</h1>
-        <p className="text-muted-foreground">
+        <h1 className="crm-page-title">Customers</h1>
+        <p className="crm-page-subtitle">
           Manage and view all your customer relationships
         </p>
       </div>

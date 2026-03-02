@@ -29,7 +29,7 @@ export const PaginationControls: React.FC<PaginationControlsProps> = ({
 }) => {
   return (
     <PermissionGate permission="CUSTOMER_VIEW">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mt-2">
       <div className="text-sm text-muted-foreground">
         Page {page} of {totalPages}
       </div>

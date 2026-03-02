@@ -1,5 +1,5 @@
 import { useAuth } from "@/contexts/AuthContext";
-import { Users, Shield, Activity, UserCheck } from "lucide-react";
+import { Users, Shield, UserCheck, Activity } from "lucide-react";
 import { motion } from "framer-motion";
 import { PermissionGate } from "@/components/PermissionGate";
 
@@ -20,14 +20,6 @@ const statCards = [
     href: "/roles",
     color: "bg-info/10 text-info",
   },
-  {
-    title: "Customers",
-    description: "Manage customer relationships",
-    icon: UserCheck,
-    permission: "CUSTOMER_VIEW",
-    href: "/customers",
-    color: "bg-success/10 text-success",
-  },
 ];
 
 const Dashboard = () => {
@@ -37,10 +29,13 @@ const Dashboard = () => {
     <div>
       <div className="crm-page-header">
         <h1 className="crm-page-title">Dashboard</h1>
-        <p className="crm-page-subtitle">Welcome back to your CRM workspace</p>
+        <p className="crm-page-subtitle">
+          Welcome back{user?.username ? `, ${user.username}` : ''} to your CRM workspace
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {/* Permission-protected cards */}
         {statCards.map((card, i) => (
           <PermissionGate key={card.title} permission={card.permission}>
             <motion.a
@@ -48,7 +43,7 @@ const Dashboard = () => {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.1 }}
-              className="crm-stat-card flex items-start gap-4 cursor-pointer group"
+              className="crm-stat-card flex items-start gap-4 cursor-pointer group hover:scale-105 transition-all duration-200"
             >
               <div className={`p-3 rounded-lg ${card.color}`}>
                 <card.icon className="w-5 h-5" />
@@ -62,6 +57,25 @@ const Dashboard = () => {
             </motion.a>
           </PermissionGate>
         ))}
+
+        {/* Customer card - always visible */}
+        <motion.a
+          href="/customers"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: statCards.length * 0.1 }}
+          className="crm-stat-card flex items-start gap-4 cursor-pointer group hover:scale-105 transition-all duration-200"
+        >
+          <div className="p-3 rounded-lg bg-success/10 text-success">
+            <UserCheck className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="font-medium text-foreground group-hover:text-primary transition-colors">
+              Customers
+            </h3>
+            <p className="text-sm text-muted-foreground mt-0.5">Manage customer relationships</p>
+          </div>
+        </motion.a>
       </div>
 
       <div className="mt-8 crm-stat-card">
@@ -70,7 +84,7 @@ const Dashboard = () => {
           <h2 className="font-medium text-foreground">Quick Overview</h2>
         </div>
         <p className="text-sm text-muted-foreground">
-          Your CRM system is up and running. Use the sidebar to navigate between modules.
+          Your CRM system is up and running. Use the cards above to navigate to different modules.
           Only features you have permission to access are visible.
         </p>
       </div>
