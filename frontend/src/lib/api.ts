@@ -245,4 +245,74 @@ export const serviceTypesApi = {
     api.delete<{ message: string }>("/service-types"),
 };
 
+// Jobs
+
+export interface Job {
+  id: number;
+  jobno: string;
+  customer_id: number;
+  customer_name?: string;
+  req_date: string;
+  schedule_date: string;
+  staff_id: number;
+  staff_name?: string;
+  status: "Pending" | "Completed" | "Cancelled" | "Rescheduled";
+  created_at: string;
+}
+
+export interface JobsResponse {
+  data: Job[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export const jobsApi = {
+
+  // 🔹 Get all jobs (pagination + search)
+  list: (params?: { page?: number; limit?: number; search?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append("page", params.page.toString());
+    if (params?.limit) queryParams.append("limit", params.limit.toString());
+    if (params?.search) queryParams.append("search", params.search);
+    return api.get(`/jobschedule?${queryParams.toString()}`);
+  },
+
+  // 🔹 Get single job
+  getById: (id: number) => api.get(`/jobschedule/${id}`),
+
+  // 🔹 Create job
+ create: (data: {
+  customer_id: number;
+  jobno: string;          // <-- required
+  req_date: string;
+  schedule_date: string;
+  staff_id: number;
+  reason?: string;        // <-- optional
+}) => api.post("/jobschedule", data),
+
+  // 🔹 Update status
+  updateStatus: (id: number, status: string) =>
+    api.put(`/jobschedule/${id}/status`, { status }),
+
+  // 🔹 Reschedule job
+  reschedule: (id: number, data: { new_schedule_date: string; staff_id: number; reason?: string }) =>
+    api.post(`/jobschedule/${id}/reschedule`, data),
+
+  // 🔹 Delete job
+  delete: (id: number) => api.delete(`/jobschedule/${id}`),
+
+  // ✅ Customers
+  listCustomers: (params?: { page?: number; limit?: number; search?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append("page", params.page.toString());
+    if (params?.limit) queryParams.append("limit", params.limit.toString());
+    if (params?.search) queryParams.append("search", params.search);
+    return api.get(`/customers?${queryParams.toString()}`);
+  },
+
+  // ✅ Staff
+  listStaff: () => api.get(`/staff`),
+};
 export default api;

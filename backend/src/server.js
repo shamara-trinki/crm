@@ -9,6 +9,7 @@ import rolesRoutes from "./routes/roles.routes.js";
 import usersRoutes from "./routes/users.routes.js";
 import customersRoutes from "./routes/customers.routes.js";
 import contactsRoutes from "./routes/contacts.routes.js";
+import jobScheduleRoutes from "./routes/jobSchedule.routes.js";
 
 import { bootstrapSuperAdmin } from "./seed/bootstrapSuperAdmin.js";
 import serviceTypesRoutes from "./routes/serviceType.routes.js";
@@ -50,7 +51,7 @@ app.use("/contacts", contactsRoutes);
 app.use("/service-types", serviceTypesRoutes);
 app.use("/introducers", introducerRoutes);
 app.get("/health", (req, res) => res.json({ ok: true }));
-
+app.use("/jobschedule", jobScheduleRoutes);
 // Bootstrap seed
 await bootstrapSuperAdmin();
 
